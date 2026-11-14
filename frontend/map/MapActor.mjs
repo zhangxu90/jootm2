@@ -29,9 +29,10 @@ export class MapActor {
     }
 
     async enter(mapId) {
-        if (mapId === this.mapId) return;
+        if (mapId === this.mapId && this.map) return;
+        const map = await loadMap(mapId);
+        this.map = map;
         this.mapId = mapId;
-        this.map = await loadMap(mapId);
     }
 
     // 取纹理（含 px/py；未加载返回 null，并触发异步加载）
@@ -43,8 +44,18 @@ export class MapActor {
         const lib = getLib(key);
         if (lib) {
             lib.getTexture(index, 80).then(tex => {
-                const e = this._texCache.get(k);
-                if (tex) { e.canvas = tex.canvas; e.px = tex.px; e.py = tex.py; }
+                const entry = this._texCache.get(k);
+                if (!entry) return;
+                if (tex) {
+                    entry.canvas = tex.canvas;
+                    entry.px = tex.px;
+                    entry.py = tex.py;
+                } else {
+                    this._texCache.delete(k);
+                }
+            }).catch(error => {
+                this._texCache.delete(k);
+                console.warn('[map] texture request failed; it can be retried:', key, index, error);
             });
         }
         return null;
