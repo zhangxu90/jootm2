@@ -261,8 +261,33 @@ export class LoginScene extends Scene {
     }
 
     _chgpw() {
-        // 服务端暂无 changePassword 协议（照 Delphi CM_CHANGEPASSWORD=2003，待补）
-        this.errEl.textContent = '修改密码功能暂未开放。';
+        const username = this._chgInputs.username.value.trim();
+        const currentPassword = this._chgInputs.current.value;
+        const newPassword = this._chgInputs.newpw.value;
+        const repeatPassword = this._chgInputs.repeat.value;
+
+        if (!username || !currentPassword) {
+            this.errEl.textContent = '请输入账号和当前密码。';
+            return;
+        }
+        if (newPassword.length < 4 || newPassword.length > 64) {
+            this.errEl.textContent = '新密码长度需为4-64位。';
+            this._chgInputs.newpw.focus();
+            return;
+        }
+        if (newPassword !== repeatPassword) {
+            this.errEl.textContent = '两次新密码不一致。';
+            this._chgInputs.repeat.focus();
+            return;
+        }
+        if (newPassword === currentPassword) {
+            this.errEl.textContent = '新密码不能与当前密码相同。';
+            this._chgInputs.newpw.focus();
+            return;
+        }
+
+        this.errEl.textContent = '正在修改密码…';
+        this.conn.send('changePassword', { username, currentPassword, newPassword });
     }
 
     // ---- 逻辑 ---------------------------------------------------------------
@@ -289,6 +314,15 @@ export class LoginScene extends Scene {
                 this._login();   // 照原版注册成功后自动登录
             } else {
                 this.errEl.textContent = msg.error || '注册失败。';
+            }
+        } else if (type === 'changePasswordResult') {
+            this.errEl.textContent = msg.ok ? '密码修改成功，请使用新密码登录。'
+                : (msg.error || '修改密码失败。');
+            if (msg.ok) {
+                this._chgInputs.current.value = '';
+                this._chgInputs.newpw.value = '';
+                this._chgInputs.repeat.value = '';
+                this._chgInputs.username.focus();
             }
         }
     }
