@@ -474,12 +474,16 @@ public final class GameWorld {
         castle.warGuild = guildName;
         saveCastleRuntimeState();
         broadcastAll(castleMsg("行会 " + guildName + " 开始攻打 " + castle.name + "！"));
+        broadcastCastleState();
         return true;
     }
 
     /** 攻击城门，返回伤害（攻城期间、靠近城门才有效）。 */
     public int attackCastleDoor(Player p, int damage) {
-        if (!castle.warActive || !castle.mapId.equals(p.map.name)) {
+        Guild attackerGuild = guildOf(p.name);
+        if (!castle.warActive || attackerGuild == null
+                || !castle.warGuild.equals(attackerGuild.name)
+                || p.map == null || !castle.mapId.equals(p.map.name)) {
             return 0;
         }
         int dx = Math.abs(p.x - castle.mainDoorX);
@@ -493,6 +497,30 @@ public final class GameWorld {
             broadcastAll(castleMsg(castle.name + " 的城门已被攻破！"));
         }
         saveCastleRuntimeState();
+        broadcastCastleState();
+        return damage;
+    }
+
+    /** 攻城时攻击指定城墙段（0=左、1=中、2=右）。 */
+    public int attackCastleWall(Player p, int wallIndex, int damage) {
+        Guild attackerGuild = guildOf(p.name);
+        if (!castle.warActive || attackerGuild == null
+                || !castle.warGuild.equals(attackerGuild.name)
+                || p.map == null || !castle.mapId.equals(p.map.name)
+                || wallIndex < 0 || wallIndex >= castle.wallHp.length) {
+            return 0;
+        }
+        int dx = Math.abs(p.x - castle.wallX[wallIndex]);
+        int dy = Math.abs(p.y - castle.wallY[wallIndex]);
+        if (dx > 1 || dy > 1 || castle.wallHp[wallIndex] <= 0) return 0;
+
+        castle.wallHp[wallIndex] = Math.max(0, castle.wallHp[wallIndex] - Math.max(1, damage));
+        if (castle.wallHp[wallIndex] == 0) {
+            String[] labels = {"左", "中", "右"};
+            broadcastAll(castleMsg(castle.name + " 的" + labels[wallIndex] + "城墙已被攻破！"));
+        }
+        saveCastleRuntimeState();
+        broadcastCastleState();
         return damage;
     }
 
@@ -504,16 +532,53 @@ public final class GameWorld {
         castle.warActive = false;
         if (castle.doorBroken() && castle.wallsBroken()) {
             castle.ownGuild = castle.warGuild;
-            Guild g = guilds.get(castle.warGuild);
-            if (g != null) {
-                g.ownsCastle = true;
-            }
             broadcastAll(castleMsg("攻城战结束，行会 " + castle.warGuild + " 占领了 " + castle.name + "！"));
         } else {
             broadcastAll(castleMsg("攻城战结束，守城成功。"));
         }
         castle.warGuild = "";
+        for (Guild guild : guilds.values()) {
+            guild.ownsCastle = !castle.ownGuild.isEmpty()
+                    && castle.ownGuild.equals(guild.name);
+            saveGuild(guild);
+        }
         saveCastleRuntimeState();
+        broadcastCastleState();
+    }
+
+    public void sendCastleState(Player player) {
+        if (player != null && player.session != null) {
+            player.session.sendJson(castleStateMessage());
+        }
+    }
+
+    private void broadcastCastleState() {
+        broadcastAll(castleStateMessage());
+    }
+
+    private JsonObject castleStateMessage() {
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "castleState");
+        message.addProperty("name", castle.name);
+        message.addProperty("ownGuild", castle.ownGuild);
+        message.addProperty("warActive", castle.warActive);
+        message.addProperty("warGuild", castle.warGuild);
+        message.addProperty("warEndAt", castle.warEndAt);
+        message.addProperty("mainDoorHp", castle.mainDoorHp);
+        message.addProperty("mainDoorMaxHp", castle.mainDoorMaxHp);
+        message.addProperty("mainDoorOpen", castle.mainDoorOpen);
+        JsonArray walls = new JsonArray();
+        for (int i = 0; i < castle.wallHp.length; i++) {
+            JsonObject wall = new JsonObject();
+            wall.addProperty("index", i);
+            wall.addProperty("x", castle.wallX[i]);
+            wall.addProperty("y", castle.wallY[i]);
+            wall.addProperty("hp", castle.wallHp[i]);
+            wall.addProperty("maxHp", castle.wallMaxHp[i]);
+            walls.add(wall);
+        }
+        message.add("walls", walls);
+        return message;
     }
 
     private void loadCastleRuntimeState() {
