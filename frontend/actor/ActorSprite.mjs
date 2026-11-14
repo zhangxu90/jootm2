@@ -168,15 +168,25 @@ export class ActorSprite {
         const key = lib + '/' + index;
         if (this._tex.has(key)) return this._tex.get(key);
         const wlib = getLib(lib);
-        if (wlib && !this._loading.has(key)) {
+        if (!wlib) return null;
+
+        if (!this._loading.has(key)) {
             this._loading.add(key);
+            this._tex.set(key, null); // Loading placeholder prevents duplicate fetches.
             wlib.getTexture(index, priority).then(tex => {
-                this._tex.set(key, tex || null);
-            }).catch(() => {
-                this._tex.set(key, null);
+                this._loading.delete(key);
+                if (tex) {
+                    this._tex.set(key, tex);
+                } else {
+                    // Missing/empty images are retriable if the library becomes available later.
+                    this._tex.delete(key);
+                }
+            }).catch(error => {
+                this._loading.delete(key);
+                this._tex.delete(key);
+                console.warn('[sprite] texture request failed; it can be retried:', lib, index, error);
             });
         }
-        this._tex.set(key, null);   // 占位，加载完成后覆盖
         return null;
     }
 }
