@@ -2175,9 +2175,47 @@ public final class GameWorld {
             }
         }
         if (a instanceof Player && ((Player) a).session != null) {
-            ((Player) a).session.sendText(o.toString());
+            Player player = (Player) a;
+            player.session.sendText(o.toString());
+            // Party frames include current HP/MP/map/position; keep them authoritative
+            // for every member whenever any player's stats change (damage, poison, heal, buffs).
+            broadcastPartyState(partyOf(player.id));
         } else {
             broadcastAround(a.map, o, a.x, a.y, SIGHT_RANGE);
+        }
+    }
+
+    private void broadcastPartyState(Party party) {
+        if (party == null) return;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "partyState");
+        JsonObject data = new JsonObject();
+        data.addProperty("leaderId", party.leaderId());
+        JsonArray members = new JsonArray();
+        for (long id : party.memberIds) {
+            Actor actor = actors.get(id);
+            if (!(actor instanceof Player)) continue;
+            Player player = (Player) actor;
+            JsonObject member = new JsonObject();
+            member.addProperty("id", player.id);
+            member.addProperty("name", player.name);
+            member.addProperty("level", player.level);
+            member.addProperty("hp", player.hp);
+            member.addProperty("maxHp", player.maxHp);
+            member.addProperty("map", player.map == null ? "" : player.map.name);
+            member.addProperty("x", player.x);
+            member.addProperty("y", player.y);
+            members.add(member);
+        }
+        data.add("members", members);
+        message.add("party", data);
+
+        for (long id : party.memberIds) {
+            Actor actor = actors.get(id);
+            if (actor instanceof Player) {
+                Player player = (Player) actor;
+                if (player.session != null) player.session.sendJson(message);
+            }
         }
     }
 
