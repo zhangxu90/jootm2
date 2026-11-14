@@ -65,7 +65,7 @@ export class WIL {
     }
 
     // 懒加载获取纹理（返回 {canvas, px, py, width, height} 或 null）
-    async getTexture(index) {
+    async getTexture(index, priority = 10) {
         if (this.textures.has(index)) {
             this.lastUse.set(index, Date.now());
             return this.textures.get(index);
@@ -82,9 +82,9 @@ export class WIL {
             this.freeOldTextures();
         }
 
-        // 经全局调度器拉取片段（5 并发 + 去重）
+        // 经全局调度器拉取片段（优先级 + 并发限制 + active/queued 去重）
         const end = this._chunkEnd(off);
-        const { start, buffer, total } = await scheduler.schedule(this.wilUrl, off, end);
+        const { start, buffer, total } = await scheduler.schedule(this.wilUrl, off, end, priority);
         if (total > this.fileSize) this.fileSize = total;
 
         // 一次性解包整个片段范围内的所有图（冗余缓存，后续请求直接命中）
