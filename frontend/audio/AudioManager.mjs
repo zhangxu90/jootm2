@@ -29,6 +29,28 @@ function readSettings() {
     }
 }
 
+/** Parse the legacy sparse sound.lst index into numeric ID -> lower-case WAV basename. */
+export function parseSoundList(source) {
+    const files = new Map();
+    let lastIndex = -1;
+    for (const rawLine of String(source || '').split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith(';')) continue;
+        const match = line.match(/^(\d+)\s*[:\s\t]+(.+)$/);
+        if (!match) continue;
+        const index = Number(match[1]);
+        // The original loader accepts strictly increasing sparse indices.
+        if (!Number.isSafeInteger(index) || index <= lastIndex) continue;
+        const relativePath = match[2].trim().replace(/\\/g, '/');
+        const filename = relativePath.split('/').pop();
+        const baseName = filename.replace(/\.[^.]+$/, '').toLowerCase();
+        if (!baseName) continue;
+        files.set(index, baseName);
+        lastIndex = index;
+    }
+    return files;
+}
+
 export class AudioManager {
     constructor() {
         const settings = readSettings();
@@ -144,41 +166,20 @@ export class AudioManager {
         if (this._soundFilesPromise) return this._soundFilesPromise;
 
         this._soundFilesPromise = (async () => {
-            const files = new Map();
             const url = soundListUrl();
-            if (!url) {
-                this._soundFiles = files;
-                return files;
-            }
-
+            if (!url) return new Map();
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const source = await response.text();
-                let lastIndex = -1;
-                for (const rawLine of source.split(/\r?\n/)) {
-                    const line = rawLine.trim();
-                    if (!line || line.startsWith(';')) continue;
-                    const match = line.match(/^(\d+)\s*[:\s\t]+(.+)$/);
-                    if (!match) continue;
-                    const index = Number(match[1]);
-                    // The original loader accepts strictly increasing sparse indices.
-                    if (!Number.isSafeInteger(index) || index <= lastIndex) continue;
-                    const relativePath = match[2].trim().replace(/\\/g, '/');
-                    const filename = relativePath.split('/').pop();
-                    const baseName = filename.replace(/\.[^.]+$/, '').toLowerCase();
-                    if (!baseName) continue;
-                    files.set(index, baseName);
-                    lastIndex = index;
-                }
+                return parseSoundList(await response.text());
             } catch (error) {
                 console.warn('[audio] unable to load Wav/sound.lst:', error);
+                return new Map();
             }
-            this._soundFiles = files;
-            return files;
         })();
 
-        return this._soundFilesPromise;
+        this._soundFiles = await this._soundFilesPromise;
+        return this._soundFiles;
     }
 
     async _loadBuffer(baseName) {
