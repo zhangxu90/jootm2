@@ -2,6 +2,7 @@
 // 真实等距地图 + 实体（sprite）+ 鼠标按住移动（走/跑）+ HUD + 聊天。
 
 import { Scene } from './Scene.mjs';
+import { audio } from '../audio/AudioManager.mjs';
 import { MapActor } from '../map/MapActor.mjs';
 import { ActorSprite } from '../actor/ActorSprite.mjs';
 import { getLib } from '../image/Images.mjs';
@@ -203,6 +204,7 @@ export class PlayScene extends Scene {
     }
 
     async onEnter() {
+        audio.stopBgm(); // Original map music is a separate MP3 channel, not the login WAV BGM.
         const { map, player, nearby, groundItems } = this.snapshot;
         this.self = player;
         this.entities.clear();
@@ -465,7 +467,7 @@ export class PlayScene extends Scene {
 
     /** 音效开关（原版 TogglePlaySoundEffect）。 */
     _toggleSound() {
-        this._soundOn = !this._soundOn;
+        this._soundOn = audio.toggleEffects();
         this._log(this._soundOn ? '[系统] 音效已开启。' : '[系统] 音效已关闭。');
     }
 
@@ -998,6 +1000,8 @@ export class PlayScene extends Scene {
                 break;
             }
             case 'attack': {
+                // Original sword-hit sound mapping is selected by weapon class in the legacy client.
+                // Keep this event silent until the active character's weapon class is known.
                 const a = this.entities.get(msg.attackerId);
                 // noAttackAnim：冲撞等不触发攻击者攻击动作（只播目标受击，对齐原版 RM_STRUCK）
                 if (a && !msg.noAttackAnim) {
