@@ -3002,6 +3002,20 @@ public final class GameService {
         session.sendText(o.toString());
     }
 
+    private void sendStorageUpdate(Player p) {
+        if (p == null || p.session == null) return;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "storage");
+        JsonArray items = new JsonArray();
+        for (ItemInstance item : p.storage) {
+            ItemTemplate template = world.itemTemplates.get(item.index);
+            items.add(item.toJson(template == null ? "?" : template.name,
+                    template == null ? 0 : template.looks));
+        }
+        message.add("items", items);
+        p.session.sendText(message.toString());
+    }
+
     private void storageStore(PlayerSession session, JsonObject msg) {
         Player p = findBySession(session);
         if (p == null) {
@@ -3028,6 +3042,7 @@ public final class GameService {
         p.storage.add(found);
         world.sendSystem(p, "已存入仓库。");
         sendBagUpdate(p);
+        sendStorageUpdate(p);
     }
 
     private void storageTake(PlayerSession session, JsonObject msg) {
@@ -3047,10 +3062,15 @@ public final class GameService {
             world.sendSystem(p, "物品不存在。");
             return;
         }
+        if (p.bag.size() >= 46) {
+            world.sendSystem(p, "背包已满，无法取出仓库物品。");
+            return;
+        }
         p.storage.remove(found);
         p.bag.add(found);
         world.sendSystem(p, "已取出。");
         sendBagUpdate(p);
+        sendStorageUpdate(p);
     }
 
     // -- trade (交易) ------------------------------------------------------------
