@@ -59,4 +59,18 @@ class ResourcesIndexGeneratorTest {
                 .getAsJsonObject();
         assertTrue(root.getAsJsonObject("music").entrySet().isEmpty());
     }
+    @Test
+    void wavAndMusicDirectoriesAreOptional() throws Exception {
+        Files.createDirectories(tempDir.resolve("Data"));
+        Files.createDirectories(tempDir.resolve("Map"));
+
+        ResourcesIndexGenerator.generate(tempDir);
+
+        JsonObject root = JsonParser.parseString(
+                new String(Files.readAllBytes(tempDir.resolve("resources.json")), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        assertTrue(root.getAsJsonObject("wavs").entrySet().isEmpty());
+        assertTrue(root.getAsJsonObject("music").entrySet().isEmpty());
+    }
+
 }
