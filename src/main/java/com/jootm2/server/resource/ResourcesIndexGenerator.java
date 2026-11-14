@@ -32,8 +32,8 @@ public final class ResourcesIndexGenerator {
         Path mapDir = findDir(resourceRoot, "map");
         Path wavDir = findDir(resourceRoot, "wav");
         Path musicDir = findDir(resourceRoot, "music");
-        if (dataDir == null || mapDir == null || wavDir == null) {
-            System.err.println("[resources] Data/Map/Wav not found under " + resourceRoot
+        if (dataDir == null || mapDir == null) {
+            System.err.println("[resources] Data/Map not found under " + resourceRoot
                     + ", skip resources.json generation");
             return;
         }
@@ -41,8 +41,9 @@ public final class ResourcesIndexGenerator {
         JsonObject root = new JsonObject();
         root.add("images", buildImages(dataDir));
         root.add("maps", buildSimpleIndex(mapDir, "map"));
-        root.add("wavs", buildSimpleIndex(wavDir, "wav"));
-        // Music is optional: legacy MapInfo MUSIC(n) resolves to Music/n.mp3.
+        // Audio folders are optional: lack of WAV/MP3 must not block visual map testing.
+        root.add("wavs", wavDir == null ? new JsonObject() : buildSimpleIndex(wavDir, "wav"));
+        // Legacy MapInfo MUSIC(n) resolves to Music/n.mp3.
         root.add("music", musicDir == null ? new JsonObject() : buildSimpleIndex(musicDir, "mp3"));
 
         Path out = resourceRoot.resolve("resources.json");
