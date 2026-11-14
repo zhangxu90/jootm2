@@ -5,6 +5,7 @@
 // 名字/等级/职业用描边字（BoldTextOut 白字黑边）。
 
 import { Scene } from '../scene/Scene.mjs';
+import { audio } from '../audio/AudioManager.mjs';
 import { PlayScene } from '../scene/PlayScene.mjs';
 import { NoticeScene } from './NoticeScene.mjs';
 import { getLib } from '../image/Images.mjs';
@@ -43,6 +44,7 @@ export class SelectCharScene extends Scene {
     }
 
     onEnter() {
+        void audio.playBgm('sellect-loop2');
         const gui = this.manager.winManager.container;
         gui.innerHTML = '';
         this.root = document.createElement('div');
@@ -53,6 +55,7 @@ export class SelectCharScene extends Scene {
     }
 
     onExit() {
+        audio.stopBgm();
         if (this.root) this.root.remove();
         document.removeEventListener('keydown', this._keyHandler);
     }
