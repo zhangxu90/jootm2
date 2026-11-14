@@ -1313,6 +1313,11 @@ export class PlayScene extends Scene {
                 this.socialKind = 'party';
                 this._renderSocialPanel();
                 break;
+            case 'partyInviteExpired':
+                this.pendingPartyInvite = null;
+                this._log('组队邀请已超时。');
+                if (this.socialKind === 'party') this._renderSocialPanel();
+                break;
             case 'tradeRequestReceived':
                 this.pendingTradeRequest = msg;
                 this.socialKind = 'trade';
