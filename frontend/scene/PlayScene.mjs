@@ -1356,6 +1356,9 @@ export class PlayScene extends Scene {
                 this._log(msg.text, msg.fg || '#008000', msg.bg || null);
                 this._addSysMsg(msg.text);
                 break;
+            case 'doorState':
+                this.mapActor.setDoorState(msg.x, msg.y, msg.open);
+                break;
             case 'dayChanging':
                 // 昼夜时段变化（原版 SM_DAYCHANGING），只换图标、不做变暗
                 this._setDayBright(msg.dayBright);
