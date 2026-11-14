@@ -49,6 +49,9 @@ public final class GameService {
     /** 物品使用间隔（ms）：药品/卷轴等消耗品不可瞬间连点（对齐原版客户端 EatingItem 串行化）。 */
     private static final long USE_ITEM_INTERVAL_MS = 300;
 
+    /** Pending trade and party invitations expire after five minutes. */
+    private static final long SOCIAL_REQUEST_TTL_MS = 5L * 60L * 1000L;
+
     private final ServerConfig config;
     private final Database database;
     private final AccountDao accountDao;
