@@ -193,6 +193,9 @@ public final class GameService {
                 case "siege":
                     siege(session, msg);
                     break;
+                case "castleWallAttack":
+                    castleWallAttack(session, msg);
+                    break;
                 case "guildWar":
                     guildWar(session, msg);
                     break;
@@ -594,6 +597,7 @@ public final class GameService {
         world.sendStats(p, null);   // 下发 longHit/wideHit/fireHit 等开关状态（刺杀默认开启，前端据此同步 self._longHit）
         sendGuildState(p);
         sendPartyState(p);
+        world.sendCastleState(p);
 
         world.broadcastEntityAdd(p);
     }
@@ -2766,6 +2770,18 @@ public final class GameService {
             world.sendSystem(p, "你的行会开始攻城（5 分钟）！");
         } else {
             world.sendSystem(p, "无法攻城（已有攻城进行中）。");
+        }
+    }
+
+    private void castleWallAttack(PlayerSession session, JsonObject msg) {
+        Player p = findBySession(session);
+        if (p == null) return;
+        int wallIndex = integer(msg, "wallIndex", -1);
+        int damage = world.attackCastleWall(p, wallIndex, Math.max(1, p.combat.dcMax));
+        if (damage > 0) {
+            world.sendSystem(p, "攻击城墙，造成 " + damage + " 伤害。");
+        } else {
+            world.sendSystem(p, "无法攻击该城墙：需要参与当前攻城，并靠近对应城墙。");
         }
     }
 
