@@ -1298,6 +1298,9 @@ export class PlayScene extends Scene {
                 break;
             case 'castleState':
                 this.castleState = msg;
+                if (this.guildState && this.guildState.guild) {
+                    this.guildState.guild.ownsCastle = this.guildState.guild.name === msg.ownGuild;
+                }
                 if (this.socialKind === 'guild') this._renderSocialPanel();
                 break;
             case 'partyState':
