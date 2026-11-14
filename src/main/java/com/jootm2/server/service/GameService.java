@@ -2852,7 +2852,7 @@ public final class GameService {
         }
         for (long id : memberIds) {
             Actor actor = world.actor(id);
-            if (actor instanceof Player member) sendPartyState(member);
+            if (actor instanceof Player) sendPartyState((Player) actor);
         }
         sendPartyState(p);
     }
@@ -2996,7 +2996,8 @@ public final class GameService {
         Long requesterId = tradeRequests.remove(p.id);
         if (requesterId == null) return;
         Actor actor = world.actor(requesterId);
-        if (actor instanceof Player requester) {
+        if (actor instanceof Player) {
+            Player requester = (Player) actor;
             world.sendSystem(requester, p.name + " 拒绝了交易请求。");
             if (requester.session != null) {
                 JsonObject closed = new JsonObject();
@@ -3212,7 +3213,8 @@ public final class GameService {
         JsonArray members = new JsonArray();
         for (long id : party.memberIds) {
             Actor actor = world.actor(id);
-            if (!(actor instanceof Player member)) continue;
+            if (!(actor instanceof Player)) continue;
+            Player member = (Player) actor;
             JsonObject entry = new JsonObject();
             entry.addProperty("id", member.id);
             entry.addProperty("name", member.name);
