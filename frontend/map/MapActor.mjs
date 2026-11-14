@@ -37,6 +37,17 @@ export class MapActor {
 
     /** Apply all currently open doors from an enterGame/changeMap snapshot. */
     applyDoorStates(doors) {
+        // The server snapshot is authoritative. Reset cached dynamic door offsets first,
+        // otherwise a door opened during a previous visit can remain open after it timed out.
+        if (this.map && this.map.tiles) {
+            for (const column of this.map.tiles) {
+                for (const tile of column || []) {
+                    if (tile && (tile.doorIndex & 0x80) !== 0) {
+                        tile.doorOffset &= 0x7f;
+                    }
+                }
+            }
+        }
         for (const door of doors || []) {
             this.setDoorState(Number(door.x), Number(door.y), true);
         }
