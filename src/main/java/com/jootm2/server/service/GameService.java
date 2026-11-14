@@ -225,6 +225,9 @@ public final class GameService {
                 case "tradeAccept":
                     tradeAccept(session);
                     break;
+                case "tradeDecline":
+                    tradeDecline(session);
+                    break;
                 case "tradeCancel":
                     tradeCancel(session);
                     break;
@@ -2985,6 +2988,24 @@ public final class GameService {
         request.addProperty("fromId", p.id);
         request.addProperty("fromName", p.name);
         if (target.session != null) target.session.sendJson(request);
+    }
+
+    private void tradeDecline(PlayerSession session) {
+        Player p = findBySession(session);
+        if (p == null) return;
+        Long requesterId = tradeRequests.remove(p.id);
+        if (requesterId == null) return;
+        Actor actor = world.actor(requesterId);
+        if (actor instanceof Player requester) {
+            world.sendSystem(requester, p.name + " 拒绝了交易请求。");
+            if (requester.session != null) {
+                JsonObject closed = new JsonObject();
+                closed.addProperty("type", "tradeClosed");
+                closed.addProperty("reason", "对方拒绝了交易请求。");
+                requester.session.sendJson(closed);
+            }
+        }
+        world.sendSystem(p, "你拒绝了交易请求。");
     }
 
     private void tradeAccept(PlayerSession session) {
