@@ -42,7 +42,7 @@ export class MapActor {
         this._texCache.set(k, { canvas: null, px: 0, py: 0 });
         const lib = getLib(key);
         if (lib) {
-            lib.getTexture(index).then(tex => {
+            lib.getTexture(index, 80).then(tex => {
                 const e = this._texCache.get(k);
                 if (tex) { e.canvas = tex.canvas; e.px = tex.px; e.py = tex.py; }
             });
