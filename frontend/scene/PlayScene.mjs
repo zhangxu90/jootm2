@@ -1079,6 +1079,7 @@ export class PlayScene extends Scene {
                 break;
             case 'entityRemove':
                 this.entities.delete(msg.id);
+                this.sprites.delete(msg.id);
                 break;
             case 'move': {
                 const e = this.entities.get(msg.id);
@@ -1388,7 +1389,11 @@ export class PlayScene extends Scene {
             case 'changeMap': {
                 // 换图快照：重建实体 + 地面物品 + 切地图
                 this.entities.clear();
+                this.sprites.clear();
                 this.groundItems.clear();
+                this.effects.length = 0;
+                this.damageNumbers.length = 0;
+                this._fxCache.clear();
                 this._holding = false;
                 this._mouseDir = -1;
                 this._viewX = null;   // 重置卷动中心
@@ -3575,6 +3580,12 @@ export class PlayScene extends Scene {
         this.pickedSource = null;   // 'bag' | 'equip'
         this.pickedSlot = -1;       // pickedSource === 'equip' 时的槽位号
         this._pickedCell = null;
+        this.entities.clear();
+        this.sprites.clear();
+        this.groundItems.clear();
+        this.effects.length = 0;
+        this.damageNumbers.length = 0;
+        this._fxCache.clear();
         const gui = this.manager.winManager.container;
         gui.innerHTML = '';
     }
