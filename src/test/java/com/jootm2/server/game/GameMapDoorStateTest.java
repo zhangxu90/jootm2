@@ -18,7 +18,7 @@ class GameMapDoorStateTest {
         assertTrue(map.openDoors().isEmpty());
 
         map.openDoor(4, 7, 1000L);
-        map.openDoor(9, 12, 2000L);
+        map.openDoor(9, 12, 5000L);
         List<int[]> open = map.openDoors();
         assertEquals(2, open.size());
         assertTrue(open.stream().anyMatch(xy -> xy[0] == 4 && xy[1] == 7));
