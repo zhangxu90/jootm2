@@ -147,17 +147,17 @@ export class AudioManager {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const source = await response.text();
                 let lastIndex = -1;
-                for (const rawLine of source.split(/\\r?\\n/)) {
+                for (const rawLine of source.split(/\r?\n/)) {
                     const line = rawLine.trim();
                     if (!line || line.startsWith(';')) continue;
-                    const match = line.match(/^(\\d+)\\s*[:\\s\\t]+(.+)$/);
+                    const match = line.match(/^(\d+)\s*[:\s\t]+(.+)$/);
                     if (!match) continue;
                     const index = Number(match[1]);
                     // The original loader accepts strictly increasing sparse indices.
                     if (!Number.isSafeInteger(index) || index <= lastIndex) continue;
-                    const relativePath = match[2].trim().replace(/\\\\/g, '/');
+                    const relativePath = match[2].trim().replace(/\\/g, '/');
                     const filename = relativePath.split('/').pop();
-                    const baseName = filename.replace(/\\.[^.]+$/, '').toLowerCase();
+                    const baseName = filename.replace(/\.[^.]+$/, '').toLowerCase();
                     if (!baseName) continue;
                     files.set(index, baseName);
                     lastIndex = index;
