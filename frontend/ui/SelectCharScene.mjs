@@ -19,10 +19,11 @@ const CHAR_POS = [
     [{ bx: 77, by: 46, fx: 77, fy: 46 }, { bx: 171, by: 97, fx: 141, fy: 83 }],
     [{ bx: 85, by: 63, fx: 85, fy: 63 }, { bx: 164, by: 103, fx: 141, fy: 83 }],
 ];
-const STAND_FRAME_COUNT = 10;   // 站立动画帧数（SELECTEDFRAME）
+const STAND_FRAME_COUNT = 16;   // 站立动画帧数（SELECTEDFRAME）
 const FRAME_MS = 300;           // 站立帧推进间隔
-const TRANSITION_FRAME_MS = 80;
-const TRANSITION_FRAME_COUNT = 10;
+const TRANSITION_FRAME_MS = 50;
+const TRANSITION_FRAME_COUNT = 13;
+const TRANSITION_EFFECT_FRAME_COUNT = 14;
 
 // 建角字段（照 MakeNewChar / FState.pas DCreateChr 按钮布局）
 const CREATE_JOB_BTNS = [74, 75, 76];   // 武士/法师/道士
@@ -148,6 +149,7 @@ export class SelectCharScene extends Scene {
         this._startSlotTransition(previous, -1);
         this.selected = n;
         this._startSlotTransition(n, 1);
+        void audio.playSound(101); // Original s_meltstone selection sound.
     }
 
     _start() {
@@ -372,7 +374,7 @@ export class SelectCharScene extends Scene {
                 x = pos.fx + off.fx;
                 y = pos.fy + off.fy;
                 // Original ChrSel[4..11] DrawBlend flicker during the transition.
-                transitionEffect = this._chrTexture(4 + (transitionFrame % 8));
+                transitionEffect = this._chrTexture(4 + (transitionFrame % TRANSITION_EFFECT_FRAME_COUNT));
             } else if (n === this.selected) {
                 img = 40 + c.job * 40 + this._frame + c.sex * 120;
                 x = pos.fx + off.fx;
@@ -386,13 +388,13 @@ export class SelectCharScene extends Scene {
             if (tex) ctx.drawImage(tex, x, y);
             // 名字/等级/职业（照 BoldTextOut 位置）
             if (n === 0) {
-                this._text(ctx, c.name, 117, 494);
-                this._text(ctx, String(c.level), 117, 523);
-                this._text(ctx, JOB_NAMES[c.job] || '', 117, 553);
+                this._text(ctx, c.name, 136, 476);
+                this._text(ctx, String(c.level), 136, 513);
+                this._text(ctx, JOB_NAMES[c.job] || '', 136, 548);
             } else {
-                this._text(ctx, c.name, 671, 496);
-                this._text(ctx, String(c.level), 671, 525);
-                this._text(ctx, JOB_NAMES[c.job] || '', 671, 555);
+                this._text(ctx, c.name, 586, 476);
+                this._text(ctx, String(c.level), 666, 513);
+                this._text(ctx, JOB_NAMES[c.job] || '', 638, 548);
             }
         }
     }
