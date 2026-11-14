@@ -312,8 +312,10 @@ export class PlayScene extends Scene {
         this.pendingPartyInvite = null;
         this.tradeState = null;
         this.pendingTradeRequest = null;
-        this.pendingPartyInvite = null;
         this.socialKind = null;
+        this.storageState = null;
+        this.storageWindow = null;
+        this.storageBody = null;
         this.socialWindow = null;
         this.socialBody = null;
         this._canvas = document.getElementById('screen');
@@ -1293,6 +1295,10 @@ export class PlayScene extends Scene {
                 this._spawnFx({ kind: 'hit', fx: 'spaceMove', x: msg.x, y: msg.y });
                 break;
             }
+            case 'storage':
+                this.storageState = { items: msg.items || [] };
+                this._renderStoragePanel();
+                break;
             case 'guildState':
                 this.guildState = msg;
                 if (this.socialKind === 'guild') this._renderSocialPanel();
@@ -2535,6 +2541,16 @@ export class PlayScene extends Scene {
                 this._clearPicked();
             }
         });
+        const storageButton = document.createElement('button');
+        storageButton.type = 'button';
+        storageButton.textContent = '仓库';
+        storageButton.title = '打开仓库';
+        storageButton.style.cssText = 'position:absolute;left:235px;top:184px;width:58px;height:20px;'
+            + 'padding:0;background:#51402d;color:#ead8b2;border:1px solid #a58b5d;'
+            + 'font:12px SimSun,serif;cursor:pointer;pointer-events:auto;';
+        storageButton.addEventListener('click', () => this._openStorage());
+        panel.appendChild(storageButton);
+
         this.bagPanel = panel;
         this._makeWindowDraggable(panel);
         gui.appendChild(panel);
