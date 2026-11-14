@@ -336,6 +336,7 @@ export class PlayScene extends Scene {
 
         try {
             await this.mapActor.enter(map.name);
+            this.mapActor.applyDoorStates(map.openDoors || []);
         } catch (e) {
             console.error('[play]', e);
         }
@@ -1420,7 +1421,11 @@ export class PlayScene extends Scene {
                 if (msg.map) {
                     void audio.playMapMusic(msg.map.musicId);
                     this.mapActor.enter(msg.map.name)
-                        .then(() => { this._miniMapIndex = msg.miniMapIndex; this._loadMiniMapTexture(this._miniMapIndex); })
+                        .then(() => {
+                            this.mapActor.applyDoorStates(msg.map.openDoors || []);
+                            this._miniMapIndex = msg.miniMapIndex;
+                            this._loadMiniMapTexture(this._miniMapIndex);
+                        })
                         .catch(console.error);
                 }
                 break;
