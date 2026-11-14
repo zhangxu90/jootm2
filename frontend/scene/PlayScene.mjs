@@ -1148,17 +1148,17 @@ export class PlayScene extends Scene {
                     else if (msg.swordHit === 'fireHit' || msg.swordHit === 'fire'
                         || msg.swordHit === 'crsHit' || msg.swordHit === 'twinHit') void audio.playSound(137);
                     else if (msg.swordHit === 'powerHit' || msg.swordHit === 'power') {
-                        void audio.playSound(this.self.sex === 0 ? 130 : 131);
+                        void audio.playSound(a.sex === 0 ? 130 : 131);
                     }
                 } else if (a && a.type === 'monster') {
                     const appearance = Math.max(0, Number(a.appr) || 0);
                     void audio.playSound(200 + appearance * 10 + 2);
                 }
-                if (a && target && this.self && target.id === this.self.id && a.type === 'player') {
+                if (a && target && a.type === 'player') {
                     const hitSound = struckSoundIndex(a, target);
                     if (hitSound >= 0) void audio.playSound(hitSound);
                 }
-                if (a && this.self && a.id === this.self.id && msg.magicId) {
+                if (a && a.type !== 'npc' && msg.magicId) {
                     // Legacy magic sound is split into start, flight and explosion IDs.
                     void audio.playSound(10000 + Number(msg.magicId) * 10 + 2);
                 }
