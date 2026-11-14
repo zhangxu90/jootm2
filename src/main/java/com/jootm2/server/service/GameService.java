@@ -3525,15 +3525,25 @@ public final class GameService {
         tradeRequestAt.remove(p.id);
         if (requesterId != null) {
             Actor requester = world.actor(requesterId);
-            if (requester instanceof Player) world.sendSystem((Player) requester,
-                    p.name + " 已离线，交易请求取消。");
+            if (requester instanceof Player) {
+                Player from = (Player) requester;
+                world.sendSystem(from, p.name + " 已离线，交易请求取消。");
+                if (from.session != null) {
+                    JsonObject closed = new JsonObject();
+                    closed.addProperty("type", "tradeClosed");
+                    closed.addProperty("reason", p.name + " 已离线，交易请求取消。");
+                    from.session.sendJson(closed);
+                }
+            }
         }
         Long partyInviterId = partyRequests.remove(p.id);
         partyRequestAt.remove(p.id);
         if (partyInviterId != null) {
             Actor inviter = world.actor(partyInviterId);
-            if (inviter instanceof Player) world.sendSystem((Player) inviter,
-                    p.name + " 已离线，组队邀请取消。");
+            if (inviter instanceof Player) {
+                Player leader = (Player) inviter;
+                world.sendSystem(leader, p.name + " 已离线，组队邀请取消。");
+            }
         }
         List<Long> partyTargets = new ArrayList<>();
         for (Map.Entry<Long, Long> entry : partyRequests.entrySet()) {
@@ -3543,8 +3553,15 @@ public final class GameService {
             partyRequests.remove(targetId);
             partyRequestAt.remove(targetId);
             Actor target = world.actor(targetId);
-            if (target instanceof Player) world.sendSystem((Player) target,
-                    p.name + " 已离线，组队邀请取消。");
+            if (target instanceof Player) {
+                Player recipient = (Player) target;
+                world.sendSystem(recipient, p.name + " 已离线，组队邀请取消。");
+                if (recipient.session != null) {
+                    JsonObject expired = new JsonObject();
+                    expired.addProperty("type", "partyInviteExpired");
+                    recipient.session.sendJson(expired);
+                }
+            }
         }
 
         List<Long> pendingTargets = new ArrayList<>();
@@ -3555,8 +3572,16 @@ public final class GameService {
             tradeRequests.remove(targetId);
             tradeRequestAt.remove(targetId);
             Actor target = world.actor(targetId);
-            if (target instanceof Player) world.sendSystem((Player) target,
-                    p.name + " 已离线，交易请求取消。");
+            if (target instanceof Player) {
+                Player recipient = (Player) target;
+                world.sendSystem(recipient, p.name + " 已离线，交易请求取消。");
+                if (recipient.session != null) {
+                    JsonObject closed = new JsonObject();
+                    closed.addProperty("type", "tradeClosed");
+                    closed.addProperty("reason", p.name + " 已离线，交易请求取消。");
+                    recipient.session.sendJson(closed);
+                }
+            }
         }
 
         // Remove the leaver from the party and refresh all remaining members.
