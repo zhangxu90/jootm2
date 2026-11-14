@@ -629,6 +629,7 @@ public final class GameService {
             if (gate != null) {
                 doChangeMap(p, gate);
             }
+            broadcastPartyState(world.partyOf(p.id));
         }
     }
 
@@ -1362,6 +1363,8 @@ public final class GameService {
             } else if (pd == 2 && p.longHitOn) {
                 swordLongHitPlayer(p, target);
             }
+            broadcastPartyState(world.partyOf(p.id));
+            broadcastPartyState(world.partyOf(target.id));
             return;
         }
         if (!(a instanceof Monster)) {
