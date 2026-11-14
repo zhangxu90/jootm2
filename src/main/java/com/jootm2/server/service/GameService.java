@@ -198,6 +198,9 @@ public final class GameService {
                 case "guildAlly":
                     guildAlly(session, msg);
                     break;
+                case "partyInfo":
+                    partyInfo(session);
+                    break;
                 case "partyInvite":
                     partyInvite(session, msg);
                     break;
@@ -578,6 +581,8 @@ public final class GameService {
 
         session.sendText(world.mapSnapshot(p, "enterGame").toString());
         world.sendStats(p, null);   // 下发 longHit/wideHit/fireHit 等开关状态（刺杀默认开启，前端据此同步 self._longHit）
+        sendGuildState(p);
+        sendPartyState(p);
 
         world.broadcastEntityAdd(p);
     }
@@ -2792,6 +2797,11 @@ public final class GameService {
     }
 
     // -- parties (组队) ----------------------------------------------------------
+
+    private void partyInfo(PlayerSession session) {
+        Player p = findBySession(session);
+        if (p != null) sendPartyState(p);
+    }
 
     private void partyInvite(PlayerSession session, JsonObject msg) {
         Player p = findBySession(session);
