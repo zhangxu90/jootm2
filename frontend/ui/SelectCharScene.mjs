@@ -21,6 +21,8 @@ const CHAR_POS = [
 ];
 const STAND_FRAME_COUNT = 10;   // 站立动画帧数（SELECTEDFRAME）
 const FRAME_MS = 300;           // 站立帧推进间隔
+const TRANSITION_FRAME_MS = 80;
+const TRANSITION_FRAME_COUNT = 10;
 
 // 建角字段（照 MakeNewChar / FState.pas DCreateChr 按钮布局）
 const CREATE_JOB_BTNS = [74, 75, 76];   // 武士/法师/道士
@@ -39,6 +41,7 @@ export class SelectCharScene extends Scene {
         this.newIndex = 0;
         this._frame = 0;
         this._frameAt = 0;
+        this._slotTransitions = [null, null];
         this.root = null;
         this.createWin = null;
     }
@@ -75,11 +78,26 @@ export class SelectCharScene extends Scene {
     }
 
     // ChrSel 图 → canvas 纹理（懒加载，未加载返回 null 并异步触发）
-    _chrTex(idx) {
-        if (this._chrCache.has(idx)) return this._chrCache.get(idx).canvas || null;
-        this._chrCache.set(idx, { canvas: null });
-        this.chr.getTexture(idx).then((t) => { this._chrCache.get(idx).canvas = t ? t.canvas : null; });
+    _chrTexture(idx) {
+        if (this._chrCache.has(idx)) return this._chrCache.get(idx).texture || null;
+        this._chrCache.set(idx, { texture: null });
+        this.chr.getTexture(idx).then((texture) => {
+            const entry = this._chrCache.get(idx);
+            if (entry) entry.texture = texture || null;
+        });
         return null;
+    }
+
+    _chrTex(idx) {
+        return this._chrTexture(idx)?.canvas || null;
+    }
+
+    _startSlotTransition(slot, direction) {
+        if (!this.chars[slot]) {
+            this._slotTransitions[slot] = null;
+            return;
+        }
+        this._slotTransitions[slot] = { direction, startedAt: performance.now() };
     }
 
     // ---- DOM 构建 ---------------------------------------------------------
@@ -125,9 +143,11 @@ export class SelectCharScene extends Scene {
     // ---- 交互 ---------------------------------------------------------------
 
     _select(n) {
-        if (this.chars[n] && this.selected !== n) {
-            this.selected = n;
-        }
+        if (!this.chars[n] || this.selected === n) return;
+        const previous = this.selected;
+        this._startSlotTransition(previous, -1);
+        this.selected = n;
+        this._startSlotTransition(n, 1);
     }
 
     _start() {
@@ -258,9 +278,26 @@ export class SelectCharScene extends Scene {
     onMessage(type, msg) {
         if (type === 'characterList') {
             const list = msg.characters || [];
+            const previousChars = this.chars;
+            const previousSelected = this.selected;
             this.chars = [list[0] || null, list[1] || null];
             if (!this.chars[this.selected]) {
                 this.selected = this.chars[0] ? 0 : (this.chars[1] ? 1 : 0);
+            }
+            for (let slot = 0; slot < 2; slot++) {
+                const oldCharacter = previousChars[slot];
+                const newCharacter = this.chars[slot];
+                if (!newCharacter) {
+                    this._slotTransitions[slot] = null;
+                    continue;
+                }
+                if (!oldCharacter || oldCharacter.name !== newCharacter.name) {
+                    this._startSlotTransition(slot, slot === this.selected ? 1 : -1);
+                }
+            }
+            if (previousSelected !== this.selected && this.chars[this.selected]) {
+                this._startSlotTransition(previousSelected, -1);
+                this._startSlotTransition(this.selected, 1);
             }
         } else if (type === 'createCharacterResult') {
             if (!msg.ok) this._msg(msg.error || '创建失败。');
@@ -316,20 +353,44 @@ export class SelectCharScene extends Scene {
             const off = n === 1 ? { bx: 340, by: 2, fx: 340, fy: 2 } : { bx: 0, by: 0, fx: 0, fy: 0 };
 
             let img, x, y;
-            if (n === this.selected) {
-                // 站立动画帧（40 + job*40 + frame + sex*120）
+            const transition = this._slotTransitions[n];
+            const frozenBase = 60 + c.job * 40 + c.sex * 120;
+            let transitionFrame = -1;
+            if (transition) {
+                const elapsed = Math.max(0, now - transition.startedAt);
+                transitionFrame = Math.min(TRANSITION_FRAME_COUNT - 1, Math.floor(elapsed / TRANSITION_FRAME_MS));
+                if (elapsed >= TRANSITION_FRAME_COUNT * TRANSITION_FRAME_MS) {
+                    this._slotTransitions[n] = null;
+                    transitionFrame = -1;
+                }
+            }
+
+            if (transitionFrame >= 0 && transition) {
+                // Thaw plays the ten ChrSel frames forward; freeze plays the same sequence backward.
+                img = frozenBase + (transition.direction > 0 ? transitionFrame : TRANSITION_FRAME_COUNT - 1 - transitionFrame);
+                x = pos.fx + off.fx;
+                y = pos.fy + off.fy;
+                // Original ChrSel[4..11] DrawBlend flicker during the transition.
+                const effect = this._chrTexture(4 + (transitionFrame % 8));
+                if (effect && effect.canvas) {
+                    const pulse = Math.max(0.15, 0.45 + 0.35 * Math.sin((now - transition.startedAt) / 45));
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'lighter';
+                    ctx.globalAlpha = pulse;
+                    ctx.drawImage(effect.canvas, x + (effect.px || 0), y + (effect.py || 0));
+                    ctx.restore();
+                }
+            } else if (n === this.selected) {
                 img = 40 + c.job * 40 + this._frame + c.sex * 120;
                 x = pos.fx + off.fx;
                 y = pos.fy + off.fy;
             } else {
-                // 冻结帧（60 + job*40 + sex*120，静止首帧）
-                img = 60 + c.job * 40 + c.sex * 120;
+                img = frozenBase;
                 x = pos.bx + off.bx;
                 y = pos.by + off.by;
             }
             const tex = this._chrTex(img);
             if (tex) ctx.drawImage(tex, x, y);
-
             // 名字/等级/职业（照 BoldTextOut 位置）
             if (n === 0) {
                 this._text(ctx, c.name, 117, 494);
