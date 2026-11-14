@@ -41,7 +41,7 @@ jobs:
           node --input-type=module -e "import('./frontend/audio/AudioManager.mjs').then(() => console.log('Audio module import passed'))"
 
       - name: Build Java server
-        run: mvn -B -DskipTests package
+        run: mvn -B verify
 
       - name: Check patch whitespace
         run: git diff --check
