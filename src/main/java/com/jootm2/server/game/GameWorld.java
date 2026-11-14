@@ -80,6 +80,7 @@ public final class GameWorld {
     public int startY;
     private final Path mapDir;
     private final Path envDir;
+    private final Path castleStateFile;
 
     private final Map<String, List<WorldData.Gate>> gatesBySrc = new HashMap<>();
     /** mapId → 中文地图名（MapInfo.txt 的第二个字段，HUD 底部“比奇省 289:618”用）。 */
@@ -127,6 +128,7 @@ public final class GameWorld {
         Path root = Paths.get(config.gamedataRoot()).toAbsolutePath();
         this.mapDir = root.resolve("Mir200").resolve("Map");
         this.envDir = root.resolve("Mir200").resolve("Envir");
+        this.castleStateFile = envDir.resolve("Castle").resolve("Sabuk.runtime.properties");
         loadNotice(root.resolve("Mir200").resolve("Notice").resolve("Notice.txt"));
 
         WorldData.StartPoint sp = WorldData.loadStartPoint(envDir.resolve("StartPoint.txt"));
@@ -144,6 +146,7 @@ public final class GameWorld {
         loadMapQuests();
         this.castle = WorldData.loadCastle(envDir.resolve("Castle").resolve("Sabuk.txt"));
         loadGuilds();
+        loadCastleRuntimeState();
         loadDropTables();
         spawnMonsters(defaultMap);
         attachNpcs(defaultMap);
@@ -469,6 +472,7 @@ public final class GameWorld {
         castle.warActive = true;
         castle.warEndAt = System.currentTimeMillis() + durationSec * 1000L;
         castle.warGuild = guildName;
+        saveCastleRuntimeState();
         broadcastAll(castleMsg("行会 " + guildName + " 开始攻打 " + castle.name + "！"));
         return true;
     }
@@ -488,6 +492,7 @@ public final class GameWorld {
             castle.mainDoorOpen = true;
             broadcastAll(castleMsg(castle.name + " 的城门已被攻破！"));
         }
+        saveCastleRuntimeState();
         return damage;
     }
 
@@ -508,6 +513,30 @@ public final class GameWorld {
             broadcastAll(castleMsg("攻城战结束，守城成功。"));
         }
         castle.warGuild = "";
+        saveCastleRuntimeState();
+    }
+
+    private void loadCastleRuntimeState() {
+        try {
+            boolean loaded = CastleStateStore.load(castleStateFile, castle);
+            for (Guild guild : guilds.values()) {
+                guild.ownsCastle = !castle.ownGuild.isEmpty()
+                        && castle.ownGuild.equals(guild.name);
+            }
+            if (loaded) {
+                System.out.println("[world] restored castle runtime state from " + castleStateFile);
+            }
+        } catch (IOException e) {
+            System.err.println("[world] cannot restore castle runtime state: " + e.getMessage());
+        }
+    }
+
+    private void saveCastleRuntimeState() {
+        try {
+            CastleStateStore.save(castleStateFile, castle);
+        } catch (IOException e) {
+            System.err.println("[world] cannot persist castle runtime state: " + e.getMessage());
+        }
     }
 
     private JsonObject castleMsg(String text) {
