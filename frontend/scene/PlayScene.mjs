@@ -1141,6 +1141,7 @@ export class PlayScene extends Scene {
                 if (this.stateWin && this.stateWin.style.display === 'block') {
                     this._refreshStateWin();
                 }
+                if (this.socialKind === 'party' && this.partyState) this._renderSocialPanel();
                 break;
             }
             case 'attack': {
@@ -1355,6 +1356,7 @@ export class PlayScene extends Scene {
                 this._refreshBag();
                 this._refreshStateWin();
                 this._refreshQuickSlots();
+                if (this.socialKind === 'trade') this._renderSocialPanel();
                 if (this.shopGoldEl) this.shopGoldEl.textContent = '金币 ' + (this.self.gold || 0);
                 // 卖出后投放框物品自动消失（被卖的物品已不在背包）
                 if (this.shopSellItem) {
