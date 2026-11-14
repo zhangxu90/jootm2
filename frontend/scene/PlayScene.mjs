@@ -308,8 +308,10 @@ export class PlayScene extends Scene {
         this._dragCleaners = [];     // 窗口拖动监听清理函数
         this.guildState = null;
         this.partyState = null;
+        this.pendingPartyInvite = null;
         this.tradeState = null;
         this.pendingTradeRequest = null;
+        this.pendingPartyInvite = null;
         this.socialKind = null;
         this.socialWindow = null;
         this.socialBody = null;
@@ -1297,6 +1299,11 @@ export class PlayScene extends Scene {
                 this.partyState = msg.party || null;
                 if (this.socialKind === 'party') this._renderSocialPanel();
                 break;
+            case 'partyInviteReceived':
+                this.pendingPartyInvite = msg;
+                this.socialKind = 'party';
+                this._renderSocialPanel();
+                break;
             case 'tradeRequestReceived':
                 this.pendingTradeRequest = msg;
                 this.socialKind = 'trade';
@@ -1800,6 +1807,22 @@ export class PlayScene extends Scene {
             }
         } else if (kind === 'party') {
             const party = this.partyState;
+            const pendingInvite = this.pendingPartyInvite;
+            if (pendingInvite) {
+                text(pendingInvite.fromName + ' 邀请你加入队伍。');
+                const inviteActions = row();
+                button(inviteActions, '接受', () => {
+                    this.pendingPartyInvite = null;
+                    this.conn.send('partyAccept');
+                    this._renderSocialPanel();
+                });
+                button(inviteActions, '拒绝', () => {
+                    this.pendingPartyInvite = null;
+                    this.conn.send('partyDecline');
+                    this._renderSocialPanel();
+                });
+                divider();
+            }
             if (!party) {
                 text('当前未组队。选择附近在线玩家名称即可发起组队。');
             } else {
