@@ -2980,6 +2980,18 @@ public final class GameService {
             world.sendSystem(p, "玩家不在线。");
             return;
         }
+        if (target.id == p.id) {
+            world.sendSystem(p, "不能与自己交易。");
+            return;
+        }
+        if (target.map != p.map || p.distanceTo(target) > 10) {
+            world.sendSystem(p, "交易对象必须在同一地图且距离 10 格以内。");
+            return;
+        }
+        if (trades.containsKey(p.id) || trades.containsKey(target.id)) {
+            world.sendSystem(p, "你或对方正在进行其他交易。");
+            return;
+        }
         tradeRequests.put(target.id, p.id);
         world.sendSystem(p, "已向 " + target.name + " 发起交易请求。");
         world.sendSystem(target, p.name + " 想与你交易。");
@@ -3019,8 +3031,14 @@ public final class GameService {
             world.sendSystem(p, "没有待接受的交易请求。");
             return;
         }
-        Player a = (Player) world.actor(requesterId);
-        if (a == null || !a.alive) {
+        Actor requester = world.actor(requesterId);
+        if (!(requester instanceof Player)) {
+            return;
+        }
+        Player a = (Player) requester;
+        if (!a.alive || a.map != p.map || p.distanceTo(a) > 10
+                || trades.containsKey(a.id) || trades.containsKey(p.id)) {
+            world.sendSystem(p, "交易已失效，双方必须在同一地图且距离 10 格以内。");
             return;
         }
         TradeSession t = new TradeSession(a, p);
@@ -3084,9 +3102,12 @@ public final class GameService {
         mine.add(found);
         p.bag.remove(found);
         p.clearQuickRef(found.makeIndex);   // 交易：清掉快捷栏引用
+        t.aConfirm = false;
+        t.bConfirm = false;
         Player other = (p == t.a) ? t.b : t.a;
         world.sendSystem(p, "已放入一件物品。");
         world.sendSystem(other, "对方放入了一件物品。");
+        sendBagUpdate(p);
         sendTradeState(t);
     }
 
@@ -3111,7 +3132,10 @@ public final class GameService {
         } else {
             t.bGold += amount;
         }
+        t.aConfirm = false;
+        t.bConfirm = false;
         world.sendSystem(p, "已放入 " + amount + " 金币。");
+        world.sendStats(p, null);
         sendTradeState(t);
     }
 
