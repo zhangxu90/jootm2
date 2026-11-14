@@ -3125,6 +3125,7 @@ export class PlayScene extends Scene {
         if (!sp || sp.entity !== e) {
             sp = new ActorSprite(e);
             this.sprites.set(e.id, sp);
+            sp.preloadCommon(50);
         }
         return sp;
     }
