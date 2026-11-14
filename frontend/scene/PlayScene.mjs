@@ -2556,6 +2556,100 @@ export class PlayScene extends Scene {
         gui.appendChild(panel);
     }
 
+
+    _openStorage() {
+        this.conn.send('storageOpen');
+    }
+
+    _closeStoragePanel() {
+        if (this.storageWindow) this.storageWindow.remove();
+        this.storageWindow = null;
+        this.storageBody = null;
+    }
+
+    _renderStoragePanel() {
+        if (!this.storageState && !this.storageWindow) return;
+
+        if (!this.storageWindow || !this.storageWindow.isConnected) {
+            const panel = document.createElement('div');
+            panel.style.cssText = 'position:absolute;left:245px;top:78px;width:310px;height:360px;'
+                + 'z-index:' + (++this._zTop) + ';background:rgba(22,17,12,0.97);'
+                + 'border:2px solid #8d744c;box-shadow:0 4px 18px #000;color:#eadbb8;'
+                + 'font:12px SimSun,serif;pointer-events:auto;';
+            const header = document.createElement('div');
+            header.style.cssText = 'height:26px;display:flex;align-items:center;justify-content:space-between;'
+                + 'padding:0 8px;background:#493923;border-bottom:1px solid #ad9061;cursor:move;';
+            const title = document.createElement('span');
+            title.textContent = '仓库';
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.textContent = 'X';
+            close.style.cssText = 'width:24px;height:20px;background:#643c2f;color:#fff;'
+                + 'border:1px solid #ad9061;cursor:pointer;';
+            close.addEventListener('click', () => this._closeStoragePanel());
+            header.append(title, close);
+            const body = document.createElement('div');
+            body.style.cssText = 'height:326px;overflow:auto;padding:8px;box-sizing:border-box;'
+                + 'display:flex;flex-direction:column;gap:5px;';
+            panel.append(header, body);
+            this.manager.winManager.container.appendChild(panel);
+            this._makeWindowDraggable(panel);
+            this.storageWindow = panel;
+            this.storageBody = body;
+        }
+
+        const body = this.storageBody;
+        body.innerHTML = '';
+        const addText = (value, color) => {
+            const line = document.createElement('div');
+            line.textContent = String(value);
+            line.style.cssText = 'line-height:17px;' + (color ? 'color:' + color + ';' : '');
+            body.appendChild(line);
+        };
+        const addRow = () => {
+            const line = document.createElement('div');
+            line.style.cssText = 'display:flex;align-items:center;gap:6px;min-height:25px;';
+            body.appendChild(line);
+            return line;
+        };
+        const makeButton = (parent, label, action) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.style.cssText = 'height:22px;min-width:52px;padding:0 6px;background:#59452d;'
+                + 'color:#f5e4c4;border:1px solid #b29a68;font:12px SimSun,serif;cursor:pointer;';
+            button.addEventListener('click', action);
+            parent.appendChild(button);
+        };
+
+        const items = this.storageState ? this.storageState.items || [] : [];
+        const bagItems = this.self ? this.self.items || [] : [];
+        addText('仓库物品：' + items.length + ' / 45');
+        if (!items.length) addText('仓库为空。');
+        for (const item of items) {
+            const row = addRow();
+            const label = document.createElement('span');
+            label.textContent = item.name + (item.durabilityMax
+                ? '  耐久 ' + item.durability + '/' + item.durabilityMax : '');
+            label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            row.appendChild(label);
+            makeButton(row, '取出', () => this.conn.send('storageTake', { makeIndex: item.makeIndex }));
+        }
+
+        const divider = document.createElement('div');
+        divider.style.cssText = 'height:1px;background:#594832;margin:5px 0;';
+        body.appendChild(divider);
+        addText('背包物品：' + bagItems.length + ' / 46');
+        for (const item of bagItems) {
+            const row = addRow();
+            const label = document.createElement('span');
+            label.textContent = item.name;
+            label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            row.appendChild(label);
+            makeButton(row, '存入', () => this.conn.send('storageStore', { makeIndex: item.makeIndex }));
+        }
+    }
+
     _refreshBag() {
         if (!this.bagPanel || !this.self) return;
         // 原版 GetGoldStr：千分位逗号，无「金币」前缀
@@ -3597,6 +3691,9 @@ export class PlayScene extends Scene {
         this.socialWindow = null;
         this.socialBody = null;
         this.socialKind = null;
+        this.storageWindow = null;
+        this.storageBody = null;
+        this.storageState = null;
         this.pickedItem = null;
         this.pickedSource = null;   // 'bag' | 'equip'
         this.pickedSlot = -1;       // pickedSource === 'equip' 时的槽位号
