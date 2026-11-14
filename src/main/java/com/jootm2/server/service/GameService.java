@@ -2649,9 +2649,11 @@ public final class GameService {
         Guild g = world.createGuild(name, p.name);
         if (g == null) {
             world.sendSystem(p, "创建行会失败（名字重复或你已在行会）。");
+            sendGuildState(p);
             return;
         }
         world.sendSystem(p, "你创建了行会 " + name + "，并成为会长。");
+        sendGuildState(p);
     }
 
     private void joinGuild(PlayerSession session, JsonObject msg) {
@@ -2665,6 +2667,7 @@ public final class GameService {
         } else {
             world.sendSystem(p, "加入行会失败（行会不存在或你已在行会）。");
         }
+        sendGuildState(p);
     }
 
     private void leaveGuild(PlayerSession session) {
@@ -2677,6 +2680,7 @@ public final class GameService {
         } else {
             world.sendSystem(p, "你不在任何行会中。");
         }
+        sendGuildState(p);
     }
 
     private void guildInfo(PlayerSession session) {
@@ -2685,6 +2689,7 @@ public final class GameService {
             return;
         }
         Guild g = world.guildOf(p.name);
+        sendGuildState(p);
         if (g == null) {
             world.sendSystem(p, "你不在任何行会中。");
             return;
@@ -2764,6 +2769,7 @@ public final class GameService {
         } else {
             world.sendSystem(p, "宣战失败（行会不存在）。");
         }
+        sendGuildState(p);
     }
 
     private void guildAlly(PlayerSession session, JsonObject msg) {
@@ -2782,6 +2788,7 @@ public final class GameService {
         } else {
             world.sendSystem(p, "结盟失败（行会不存在）。");
         }
+        sendGuildState(p);
     }
 
     // -- parties (组队) ----------------------------------------------------------
@@ -2805,13 +2812,16 @@ public final class GameService {
             if (world.joinParty(target.id, party.leaderId())) {
                 world.sendSystem(p, target.name + " 加入了队伍。");
                 world.sendSystem(target, "你加入了 " + p.name + " 的队伍。");
+                broadcastPartyState(world.partyOf(p.id));
             } else {
                 world.sendSystem(p, "邀请失败（对方已在队伍中）。");
+                sendPartyState(p);
             }
         } else {
             world.createParty(p.id, target.id);
             world.sendSystem(p, "你和 " + target.name + " 组成了队伍。");
             world.sendSystem(target, "你和 " + p.name + " 组成了队伍。");
+            broadcastPartyState(world.partyOf(p.id));
         }
     }
 
@@ -2820,11 +2830,18 @@ public final class GameService {
         if (p == null) {
             return;
         }
+        Party previous = world.partyOf(p.id);
+        List<Long> memberIds = previous == null ? new ArrayList<>() : new ArrayList<>(previous.memberIds);
         if (world.leaveParty(p.id)) {
             world.sendSystem(p, "你退出了队伍。");
         } else {
             world.sendSystem(p, "你不在队伍中。");
         }
+        for (long id : memberIds) {
+            Actor actor = world.actor(id);
+            if (actor instanceof Player member) sendPartyState(member);
+        }
+        sendPartyState(p);
     }
 
     private void partyChat(PlayerSession session, JsonObject msg) {
@@ -2953,6 +2970,11 @@ public final class GameService {
         tradeRequests.put(target.id, p.id);
         world.sendSystem(p, "已向 " + target.name + " 发起交易请求。");
         world.sendSystem(target, p.name + " 想与你交易。");
+        JsonObject request = new JsonObject();
+        request.addProperty("type", "tradeRequestReceived");
+        request.addProperty("fromId", p.id);
+        request.addProperty("fromName", p.name);
+        if (target.session != null) target.session.sendJson(request);
     }
 
     private void tradeAccept(PlayerSession session) {
@@ -2974,6 +2996,7 @@ public final class GameService {
         trades.put(p.id, t);
         world.sendSystem(a, p.name + " 接受了交易。");
         world.sendSystem(p, "交易开始。");
+        sendTradeState(t);
     }
 
     private void tradeCancel(PlayerSession session) {
@@ -2998,6 +3021,7 @@ public final class GameService {
         trades.remove(t.b.id);
         world.sendSystem(t.a, "交易取消。");
         world.sendSystem(t.b, "交易取消。");
+        sendTradeClosed(t, "交易取消。");
         sendBagUpdate(t.a);
         sendBagUpdate(t.b);
     }
@@ -3031,6 +3055,7 @@ public final class GameService {
         Player other = (p == t.a) ? t.b : t.a;
         world.sendSystem(p, "已放入一件物品。");
         world.sendSystem(other, "对方放入了一件物品。");
+        sendTradeState(t);
     }
 
     private void tradeAddGold(PlayerSession session, JsonObject msg) {
@@ -3055,6 +3080,7 @@ public final class GameService {
             t.bGold += amount;
         }
         world.sendSystem(p, "已放入 " + amount + " 金币。");
+        sendTradeState(t);
     }
 
     private void tradeConfirm(PlayerSession session) {
@@ -3075,6 +3101,7 @@ public final class GameService {
             executeTrade(t);
         } else {
             world.sendSystem(p, "已确认，等待对方确认。");
+            sendTradeState(t);
         }
     }
 
@@ -3091,10 +3118,133 @@ public final class GameService {
         trades.remove(t.b.id);
         world.sendSystem(t.a, "交易完成。");
         world.sendSystem(t.b, "交易完成。");
+        sendTradeClosed(t, "交易完成。");
         sendBagUpdate(t.a);
         sendBagUpdate(t.b);
         world.sendStats(t.a, null);
         world.sendStats(t.b, null);
+    }
+
+    private void sendGuildState(Player p) {
+        if (p == null || p.session == null) return;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "guildState");
+        Guild guild = world.guildOf(p.name);
+        if (guild == null) {
+            message.add("guild", null);
+        } else {
+            JsonObject data = new JsonObject();
+            data.addProperty("name", guild.name);
+            data.addProperty("masterName", guild.masterName);
+            data.addProperty("memberCount", guild.memberCount());
+            data.addProperty("ownsCastle", guild.ownsCastle);
+            data.addProperty("castleGold", guild.castleGold);
+            data.add("members", stringArray(guild.members));
+            data.add("elders", stringArray(guild.elders));
+            data.add("allyGuilds", stringArray(guild.allyGuilds));
+            data.add("warGuilds", stringArray(guild.warGuilds));
+            message.add("guild", data);
+        }
+
+        JsonArray available = new JsonArray();
+        for (Guild item : world.guilds()) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("name", item.name);
+            entry.addProperty("masterName", item.masterName);
+            entry.addProperty("memberCount", item.memberCount());
+            entry.addProperty("ownsCastle", item.ownsCastle);
+            available.add(entry);
+        }
+        message.add("availableGuilds", available);
+        p.session.sendJson(message);
+    }
+
+    private JsonArray stringArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        for (String value : values) array.add(value);
+        return array;
+    }
+
+    private void sendPartyState(Player p) {
+        if (p == null || p.session == null) return;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "partyState");
+        Party party = world.partyOf(p.id);
+        if (party == null) {
+            message.add("party", null);
+            p.session.sendJson(message);
+            return;
+        }
+
+        JsonObject data = new JsonObject();
+        data.addProperty("leaderId", party.leaderId());
+        JsonArray members = new JsonArray();
+        for (long id : party.memberIds) {
+            Actor actor = world.actor(id);
+            if (!(actor instanceof Player member)) continue;
+            JsonObject entry = new JsonObject();
+            entry.addProperty("id", member.id);
+            entry.addProperty("name", member.name);
+            entry.addProperty("level", member.level);
+            entry.addProperty("hp", member.hp);
+            entry.addProperty("maxHp", member.maxHp);
+            entry.addProperty("map", member.map == null ? "" : member.map.name);
+            entry.addProperty("x", member.x);
+            entry.addProperty("y", member.y);
+            members.add(entry);
+        }
+        data.add("members", members);
+        message.add("party", data);
+        p.session.sendJson(message);
+    }
+
+    private void broadcastPartyState(Party party) {
+        if (party == null) return;
+        for (long id : new ArrayList<>(party.memberIds)) {
+            Actor actor = world.actor(id);
+            if (actor instanceof Player member) sendPartyState(member);
+        }
+    }
+
+    private JsonArray tradeItemArray(List<ItemInstance> items) {
+        JsonArray array = new JsonArray();
+        for (ItemInstance item : items) {
+            ItemTemplate template = world.itemTemplates.get(item.index);
+            array.add(item.toJson(template == null ? "?" : template.name,
+                    template == null ? 0 : template.looks));
+        }
+        return array;
+    }
+
+    private JsonObject tradeStateFor(Player self, TradeSession trade) {
+        boolean isA = self == trade.a;
+        Player other = isA ? trade.b : trade.a;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "tradeState");
+        message.addProperty("selfName", self.name);
+        message.addProperty("otherName", other.name);
+        message.add("selfItems", tradeItemArray(isA ? trade.aItems : trade.bItems));
+        message.add("otherItems", tradeItemArray(isA ? trade.bItems : trade.aItems));
+        message.addProperty("selfGold", isA ? trade.aGold : trade.bGold);
+        message.addProperty("otherGold", isA ? trade.bGold : trade.aGold);
+        message.addProperty("selfConfirmed", isA ? trade.aConfirm : trade.bConfirm);
+        message.addProperty("otherConfirmed", isA ? trade.bConfirm : trade.aConfirm);
+        return message;
+    }
+
+    private void sendTradeState(TradeSession trade) {
+        if (trade == null) return;
+        if (trade.a.session != null) trade.a.session.sendJson(tradeStateFor(trade.a, trade));
+        if (trade.b.session != null) trade.b.session.sendJson(tradeStateFor(trade.b, trade));
+    }
+
+    private void sendTradeClosed(TradeSession trade, String reason) {
+        if (trade == null) return;
+        JsonObject message = new JsonObject();
+        message.addProperty("type", "tradeClosed");
+        message.addProperty("reason", reason);
+        if (trade.a.session != null) trade.a.session.sendJson(message);
+        if (trade.b.session != null) trade.b.session.sendJson(message);
     }
 
     private void logout(PlayerSession session) {
