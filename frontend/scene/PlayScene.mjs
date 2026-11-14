@@ -307,6 +307,7 @@ export class PlayScene extends Scene {
         this._zTop = 100;            // 窗口 z-index 计数器（点击前置递增）
         this._dragCleaners = [];     // 窗口拖动监听清理函数
         this.guildState = null;
+        this.castleState = null;
         this.partyState = null;
         this.pendingPartyInvite = null;
         this.tradeState = null;
@@ -1295,6 +1296,10 @@ export class PlayScene extends Scene {
                 this.guildState = msg;
                 if (this.socialKind === 'guild') this._renderSocialPanel();
                 break;
+            case 'castleState':
+                this.castleState = msg;
+                if (this.socialKind === 'guild') this._renderSocialPanel();
+                break;
             case 'partyState':
                 this.partyState = msg.party || null;
                 if (this.socialKind === 'party') this._renderSocialPanel();
@@ -1775,7 +1780,22 @@ export class PlayScene extends Scene {
                 const actions = row();
                 button(actions, '刷新', () => this.conn.send('guildInfo'));
                 button(actions, '退出行会', () => this.conn.send('leaveGuild'));
-                button(actions, '攻城', () => this.conn.send('siege'));
+                button(actions, '攻城/攻击城门', () => this.conn.send('siege'));
+                const castle = this.castleState;
+                if (castle) {
+                    text('沙巴克城主：' + (castle.ownGuild || '无主')
+                        + (castle.warActive ? '；攻城行会：' + castle.warGuild : '；当前无攻城'));
+                    text('城门 HP：' + castle.mainDoorHp + '/' + castle.mainDoorMaxHp
+                        + (castle.mainDoorOpen ? '（已开启）' : ''));
+                    const wallRow = row();
+                    const wallLabels = ['左城墙', '中城墙', '右城墙'];
+                    for (const wall of castle.walls || []) {
+                        const label = wallLabels[wall.index] || ('城墙' + wall.index);
+                        button(wallRow, label + ' ' + wall.hp + '/' + wall.maxHp,
+                            () => this.conn.send('castleWallAttack', { wallIndex: wall.index }),
+                            !castle.warActive || wall.hp <= 0 || !guild);
+                    }
+                }
                 divider();
                 const warRow = row();
                 const target = field(warRow, '目标行会名称', 140);
