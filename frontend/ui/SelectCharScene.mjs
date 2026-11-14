@@ -34,7 +34,7 @@ export class SelectCharScene extends Scene {
         this.prg = getLib('prguse');
         this.chr = getLib('chrsel');
         this._prgCache = new Map();  // Prguse 图 → img URL
-        this._chrCache = new Map();  // ChrSel 图 → {canvas}
+        this._chrCache = new Map();  // ChrSel 图 → decoded WIL texture
         this._bgTex = null;
         this.chars = [null, null];   // 两个角色槽（照 ChrArr[0..1]）
         this.selected = 0;
@@ -339,7 +339,7 @@ export class SelectCharScene extends Scene {
             this.prg.getTexture(65).then((t) => { this._bgTex = t ? t.canvas : null; });
         }
 
-        // 站立帧推进（照 PlayScene：每 300ms aniIndex+1 循环）
+        // 站立帧推进（SELECTEDFRAME=16，300ms/帧）
         const now = performance.now();
         if (now - this._frameAt >= FRAME_MS) {
             this._frameAt = now;
@@ -369,11 +369,11 @@ export class SelectCharScene extends Scene {
             }
 
             if (transitionFrame >= 0 && transition) {
-                // Thaw plays the ten ChrSel frames forward; freeze plays the same sequence backward.
+                // Thaw plays the 13-frame ChrSel freeze sequence forward; freeze plays it backward.
                 img = frozenBase + (transition.direction > 0 ? transitionFrame : TRANSITION_FRAME_COUNT - 1 - transitionFrame);
                 x = pos.fx + off.fx;
                 y = pos.fy + off.fy;
-                // Original ChrSel[4..11] DrawBlend flicker during the transition.
+                // Original ChrSel[4..17] DrawBlend flicker uses 14 frames at 50ms each.
                 transitionEffect = this._chrTexture(4 + (transitionFrame % TRANSITION_EFFECT_FRAME_COUNT));
             } else if (n === this.selected) {
                 img = 40 + c.job * 40 + this._frame + c.sex * 120;
