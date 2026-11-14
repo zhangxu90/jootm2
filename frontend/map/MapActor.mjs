@@ -35,6 +35,16 @@ export class MapActor {
         this.mapId = mapId;
     }
 
+    /** Apply the server's SM_DOORSTATE update to the matching MAP tile. */
+    setDoorState(x, y, open) {
+        const tile = this.map && this.map.tiles
+            && this.map.tiles[x] && this.map.tiles[x][y];
+        if (!tile || (tile.doorIndex & 0x80) === 0) return false;
+        const offset = tile.doorOffset & 0x7f;
+        tile.doorOffset = open ? (offset | 0x80) : offset;
+        return true;
+    }
+
     // 取纹理（含 px/py；未加载返回 null，并触发异步加载）
     _getTex(key, index) {
         const k = key + '/' + index;
@@ -158,9 +168,14 @@ export class MapActor {
                 if (t.obj < 0) continue;
                 let objIdx = t.obj;
                 let blend = false;
+                // Original PlayScn door rendering: the open bit adds the low-7-bit
+                // FrontDoorOffset to the base object image index.
+                if ((t.doorIndex & 0x80) !== 0 && (t.doorOffset & 0x80) !== 0) {
+                    objIdx += t.doorOffset & 0x7f;
+                }
                 if (t.hasAni) {
                     const frame = Math.floor(Date.now() / 200) % t.aniFrame;
-                    objIdx = t.obj + frame;
+                    objIdx += frame;
                     blend = t.blend;
                 }
                 const tex = this._getTex(this._libKey('objects', t.objFile), objIdx);
