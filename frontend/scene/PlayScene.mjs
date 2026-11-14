@@ -206,6 +206,7 @@ export class PlayScene extends Scene {
     async onEnter() {
         audio.stopBgm(); // Original map music is a separate MP3 channel, not the login WAV BGM.
         const { map, player, nearby, groundItems } = this.snapshot;
+        void audio.playMapMusic(map ? map.musicId : -1);
         this.self = player;
         this.entities.clear();
         this.entities.set(player.id, player);
@@ -1041,12 +1042,26 @@ export class PlayScene extends Scene {
             case 'death': {
                 // 播死亡动画（普通怪物重生时 entityAdd 替换对象恢复；换图时清空）
                 const e = this.entities.get(msg.id);
-                if (e) { e._action = 'die'; e._actionAt = Date.now(); }
+                if (e) {
+                    e._action = 'die';
+                    e._actionAt = Date.now();
+                    if (e.type === 'player') {
+                        void audio.playSound(e.sex === 0 ? 144 : 145);
+                        if (this.self && e.id === this.self.id) void audio.playBgm('game over2');
+                    } else {
+                        const appearance = Math.max(0, Number(e.appr) || 0);
+                        void audio.playSound(200 + appearance * 10 + 5);
+                    }
+                }
                 if (this.castTarget === msg.id) this.castTarget = null;
                 break;
             }
             case 'spellCast': {
                 const c = this.entities.get(msg.casterId);
+                if (c && c.type === 'player' && this.self && c.id === this.self.id
+                    && Number(msg.magicId) > 0) {
+                    void audio.playSound(10000 + Number(msg.magicId) * 10);
+                }
                 // 施法动作（HA.spell 段，与普通攻击 hit 段不同）；怪物施法者不覆盖——
                 // 神兽吐火等由 attack 消息设置攻击动画（ActAttack 两足站立喷火），避免被 spell→stand 回退覆盖
                 if (c && c.type === 'player') { c._action = 'spell'; c._actionAt = Date.now(); }
@@ -1101,7 +1116,8 @@ export class PlayScene extends Scene {
                 break;
             }
             case 'spaceMove': {
-                // 传送现身特效（瞬息移动）：在目标位置播放传送漩涡（原版 SPACEMOVE_SHOW2）
+                // 传送现身特效（瞬息移动）：原版 SPACEMOVE_SHOW2 + 入场声音。
+                void audio.playSound(110);
                 this._spawnFx({ kind: 'hit', fx: 'spaceMove', x: msg.x, y: msg.y });
                 break;
             }
@@ -1169,6 +1185,7 @@ export class PlayScene extends Scene {
                 for (const e of msg.nearby || []) this.entities.set(e.id, e);
                 for (const g of msg.groundItems || []) this.groundItems.set(g.id, g);
                 if (msg.map) {
+                    void audio.playMapMusic(msg.map.musicId);
                     this.mapActor.enter(msg.map.name)
                         .then(() => { this._miniMapIndex = msg.miniMapIndex; this._loadMiniMapTexture(this._miniMapIndex); })
                         .catch(console.error);
@@ -3068,6 +3085,8 @@ export class PlayScene extends Scene {
     }
 
     onExit() {
+        audio.stopMapMusic();
+        audio.stopBgm();
         document.removeEventListener('keydown', this._keyDown);
         if (this._keyUp) document.removeEventListener('keyup', this._keyUp);
         if (this._mdHandler) this._canvas.removeEventListener('mousedown', this._mdHandler);
