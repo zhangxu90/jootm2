@@ -1823,6 +1823,14 @@ public final class GameWorld {
         map.addProperty("width", p.map.width);
         map.addProperty("height", p.map.height);
         map.addProperty("musicId", mapMusicIds.getOrDefault(p.map.name, -1));
+        JsonArray openDoors = new JsonArray();
+        for (int[] door : p.map.openDoors()) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("x", door[0]);
+            entry.addProperty("y", door[1]);
+            openDoors.add(entry);
+        }
+        map.add("openDoors", openDoors);
         o.add("map", map);
         o.addProperty("dayBright", dayBright);   // 昼夜时段（HUD 天气图标）
         o.addProperty("miniMapIndex", mapMiniIndex.getOrDefault(p.map.name, -1));   // mmap.wil 索引（-1 = 无小地图）
