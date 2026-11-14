@@ -61,7 +61,9 @@ public final class GameService {
 
     // 交易状态
     private final Map<Long, Long> tradeRequests = new HashMap<>();
-    private final Map<Long, Long> partyRequests = new HashMap<>();   // targetId -> requesterId
+    private final Map<Long, Long> tradeRequestAt = new HashMap<>();
+    private final Map<Long, Long> partyRequests = new HashMap<>();
+    private final Map<Long, Long> partyRequestAt = new HashMap<>();   // targetId -> requesterId
     private final Map<Long, TradeSession> trades = new HashMap<>();  // playerId -> session
 
     public GameService(ServerConfig config, Database database) throws SQLException {
@@ -93,6 +95,7 @@ public final class GameService {
             return;
         }
         synchronized (world.lock) {
+            expirePendingSocialRequests();
             switch (type) {
                 case "ping":
                     session.sendText("{\"type\":\"pong\"}");
@@ -2867,12 +2870,16 @@ public final class GameService {
             world.sendSystem(p, "对方已经有队伍。");
             return;
         }
-        if (partyRequests.containsKey(target.id)) {
+        Long existingRequestAt = partyRequestAt.get(target.id);
+        if (existingRequestAt != null && System.currentTimeMillis() - existingRequestAt
+                <= SOCIAL_REQUEST_TTL_MS) {
             world.sendSystem(p, "对方已有待处理的组队邀请。");
             return;
         }
-
+        partyRequests.remove(target.id);
+        partyRequestAt.remove(target.id);
         partyRequests.put(target.id, p.id);
+        partyRequestAt.put(target.id, System.currentTimeMillis());
         world.sendSystem(p, "已向 " + target.name + " 发出组队邀请，等待对方接受。");
         JsonObject request = new JsonObject();
         request.addProperty("type", "partyInviteReceived");
@@ -2885,8 +2892,10 @@ public final class GameService {
         Player target = findBySession(session);
         if (target == null) return;
         Long leaderId = partyRequests.remove(target.id);
-        if (leaderId == null) {
-            world.sendSystem(target, "没有待接受的组队邀请。");
+        Long requestedAt = partyRequestAt.remove(target.id);
+        if (leaderId == null || requestedAt == null
+                || System.currentTimeMillis() - requestedAt > SOCIAL_REQUEST_TTL_MS) {
+            world.sendSystem(target, "组队邀请已过期或不存在。");
             return;
         }
         Actor inviterActor = world.actor(leaderId);
@@ -2919,6 +2928,7 @@ public final class GameService {
         Player target = findBySession(session);
         if (target == null) return;
         Long inviterId = partyRequests.remove(target.id);
+        partyRequestAt.remove(target.id);
         if (inviterId == null) return;
         Actor inviterActor = world.actor(inviterId);
         if (inviterActor instanceof Player) {
@@ -3081,7 +3091,16 @@ public final class GameService {
             world.sendSystem(p, "你或对方正在进行其他交易。");
             return;
         }
+        Long existingRequestAt = tradeRequestAt.get(target.id);
+        if (existingRequestAt != null && System.currentTimeMillis() - existingRequestAt
+                <= SOCIAL_REQUEST_TTL_MS) {
+            world.sendSystem(p, "对方已有待处理的交易请求。");
+            return;
+        }
+        tradeRequests.remove(target.id);
+        tradeRequestAt.remove(target.id);
         tradeRequests.put(target.id, p.id);
+        tradeRequestAt.put(target.id, System.currentTimeMillis());
         world.sendSystem(p, "已向 " + target.name + " 发起交易请求。");
         world.sendSystem(target, p.name + " 想与你交易。");
         JsonObject request = new JsonObject();
@@ -3095,6 +3114,7 @@ public final class GameService {
         Player p = findBySession(session);
         if (p == null) return;
         Long requesterId = tradeRequests.remove(p.id);
+        tradeRequestAt.remove(p.id);
         if (requesterId == null) return;
         Actor actor = world.actor(requesterId);
         if (actor instanceof Player) {
@@ -3116,8 +3136,10 @@ public final class GameService {
             return;
         }
         Long requesterId = tradeRequests.remove(p.id);
-        if (requesterId == null) {
-            world.sendSystem(p, "没有待接受的交易请求。");
+        Long requestedAt = tradeRequestAt.remove(p.id);
+        if (requesterId == null || requestedAt == null
+                || System.currentTimeMillis() - requestedAt > SOCIAL_REQUEST_TTL_MS) {
+            world.sendSystem(p, "交易请求已过期或不存在。");
             return;
         }
         Actor requester = world.actor(requesterId);
@@ -3410,6 +3432,53 @@ public final class GameService {
         }
     }
 
+    /** Expire social invitations lazily on every incoming client message. */
+    private void expirePendingSocialRequests() {
+        long now = System.currentTimeMillis();
+
+        for (Long targetId : new ArrayList<>(tradeRequests.keySet())) {
+            Long requestedAt = tradeRequestAt.get(targetId);
+            if (requestedAt != null && now - requestedAt <= SOCIAL_REQUEST_TTL_MS) continue;
+            Long requesterId = tradeRequests.remove(targetId);
+            tradeRequestAt.remove(targetId);
+            Actor target = world.actor(targetId);
+            Actor requester = requesterId == null ? null : world.actor(requesterId);
+            if (target instanceof Player) world.sendSystem((Player) target, "交易请求已超时。");
+            if (requester instanceof Player) {
+                Player from = (Player) requester;
+                world.sendSystem(from, "发给 " + (target instanceof Player ? ((Player) target).name : "目标玩家")
+                        + " 的交易请求已超时。");
+                if (from.session != null) {
+                    JsonObject closed = new JsonObject();
+                    closed.addProperty("type", "tradeClosed");
+                    closed.addProperty("reason", "交易请求已超时。");
+                    from.session.sendJson(closed);
+                }
+            }
+        }
+
+        for (Long targetId : new ArrayList<>(partyRequests.keySet())) {
+            Long requestedAt = partyRequestAt.get(targetId);
+            if (requestedAt != null && now - requestedAt <= SOCIAL_REQUEST_TTL_MS) continue;
+            Long inviterId = partyRequests.remove(targetId);
+            partyRequestAt.remove(targetId);
+            Actor target = world.actor(targetId);
+            Actor inviter = inviterId == null ? null : world.actor(inviterId);
+            if (target instanceof Player) {
+                Player recipient = (Player) target;
+                world.sendSystem(recipient, "组队邀请已超时。");
+                if (recipient.session != null) {
+                    JsonObject expired = new JsonObject();
+                    expired.addProperty("type", "partyInviteExpired");
+                    recipient.session.sendJson(expired);
+                }
+            }
+            if (inviter instanceof Player) {
+                world.sendSystem((Player) inviter, "组队邀请已超时。");
+            }
+        }
+    }
+
     private void cleanupOnlineState(Player p) {
         if (p == null) return;
 
@@ -3421,12 +3490,14 @@ public final class GameService {
 
         // Remove any pending request sent by this player or addressed to this player.
         Long requesterId = tradeRequests.remove(p.id);
+        tradeRequestAt.remove(p.id);
         if (requesterId != null) {
             Actor requester = world.actor(requesterId);
             if (requester instanceof Player) world.sendSystem((Player) requester,
                     p.name + " 已离线，交易请求取消。");
         }
         Long partyInviterId = partyRequests.remove(p.id);
+        partyRequestAt.remove(p.id);
         if (partyInviterId != null) {
             Actor inviter = world.actor(partyInviterId);
             if (inviter instanceof Player) world.sendSystem((Player) inviter,
@@ -3438,6 +3509,7 @@ public final class GameService {
         }
         for (Long targetId : partyTargets) {
             partyRequests.remove(targetId);
+            partyRequestAt.remove(targetId);
             Actor target = world.actor(targetId);
             if (target instanceof Player) world.sendSystem((Player) target,
                     p.name + " 已离线，组队邀请取消。");
@@ -3449,6 +3521,7 @@ public final class GameService {
         }
         for (Long targetId : pendingTargets) {
             tradeRequests.remove(targetId);
+            tradeRequestAt.remove(targetId);
             Actor target = world.actor(targetId);
             if (target instanceof Player) world.sendSystem((Player) target,
                     p.name + " 已离线，交易请求取消。");
