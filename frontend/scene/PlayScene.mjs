@@ -306,6 +306,13 @@ export class PlayScene extends Scene {
         this._fxCache = new Map();   // 特效帧纹理缓存 'lib/index' -> canvas
         this._zTop = 100;            // 窗口 z-index 计数器（点击前置递增）
         this._dragCleaners = [];     // 窗口拖动监听清理函数
+        this.guildState = null;
+        this.partyState = null;
+        this.tradeState = null;
+        this.pendingTradeRequest = null;
+        this.socialKind = null;
+        this.socialWindow = null;
+        this.socialBody = null;
         this._canvas = document.getElementById('screen');
         this.chatLines = [];
         this._chatInput = null;
@@ -481,9 +488,9 @@ export class PlayScene extends Scene {
         // 底板中部/右下按钮（Prguse 128..142，28×13）
         const botBtns = [
             { x: 219, icon: 130, tip: '小地图(V)', action: () => this._toggleMiniMap() },
-            { x: 249, icon: 132, tip: '交易', action: () => this._log('交易功能未开放。') },
-            { x: 279, icon: 134, tip: '行会', action: () => this._log('行会功能未开放。') },
-            { x: 309, icon: 128, tip: '编组', action: () => this._log('编组功能未开放。') },
+            { x: 249, icon: 132, tip: '交易', action: () => this._openSocialPanel('trade') },
+            { x: 279, icon: 134, tip: '行会', action: () => this._openSocialPanel('guild') },
+            { x: 309, icon: 128, tip: '编组', action: () => this._openSocialPanel('party') },
             // 属性加点：原版只有「有可分配点数」时才显示（且会闪烁），当前没有属性点系统 → 默认隐藏
             { x: 339, icon: 140, tip: '属性加点', hidden: true, action: () => this._log('暂无可分配点数。') },
             { x: 530, icon: 136, tip: '退出角色', action: () => this._logout() },
@@ -1281,6 +1288,36 @@ export class PlayScene extends Scene {
                 this._spawnFx({ kind: 'hit', fx: 'spaceMove', x: msg.x, y: msg.y });
                 break;
             }
+            case 'guildState':
+                this.guildState = msg;
+                if (this.socialKind === 'guild') this._renderSocialPanel();
+                break;
+            case 'partyState':
+                this.partyState = msg.party || null;
+                if (this.socialKind === 'party') this._renderSocialPanel();
+                break;
+            case 'tradeRequestReceived':
+                this.pendingTradeRequest = msg;
+                this.socialKind = 'trade';
+                this._renderSocialPanel();
+                break;
+            case 'tradeState':
+                this.tradeState = msg;
+                this.pendingTradeRequest = null;
+                if (this.socialKind === 'trade') this._renderSocialPanel();
+                break;
+            case 'tradeClosed':
+                this.tradeState = null;
+                this.pendingTradeRequest = null;
+                this._log(msg.reason || '交易已结束。');
+                if (this.socialKind === 'trade') this._renderSocialPanel();
+                break;
+            case 'guildChat':
+                this._log('[行会] ' + msg.name + ': ' + msg.text, '#008000');
+                break;
+            case 'partyChat':
+                this._log('[队伍] ' + msg.name + ': ' + msg.text, '#1d4ed8');
+                break;
             case 'chat':
                 // 聊天板是白色底（底板自带），普通聊天用黑色字
                 this._log(`${msg.name}: ${msg.text}`, '#000000');
@@ -1619,6 +1656,217 @@ export class PlayScene extends Scene {
 
     _bringToFront(win) {
         win.style.zIndex = ++this._zTop;
+    }
+
+
+    _openSocialPanel(kind) {
+        this.socialKind = kind;
+        if (kind === 'guild') this.conn.send('guildInfo');
+        else if (kind === 'party') this.conn.send('partyInfo');
+        this._renderSocialPanel();
+    }
+
+    _closeSocialPanel() {
+        if (this.socialWindow) this.socialWindow.remove();
+        this.socialWindow = null;
+        this.socialBody = null;
+        this.socialKind = null;
+    }
+
+    _renderSocialPanel() {
+        if (!this.socialKind || !this.manager || !this.manager.winManager) return;
+        const kind = this.socialKind;
+        if (!this.socialWindow || !this.socialWindow.isConnected) {
+            const win = document.createElement('div');
+            win.style.cssText = 'position:absolute;left:205px;top:74px;width:390px;max-height:500px;'
+                + 'z-index:' + (++this._zTop) + ';background:rgba(20,16,12,0.97);'
+                + 'border:2px solid #8c744b;box-shadow:0 3px 14px #000;color:#eee4ce;'
+                + 'font:12px SimSun,serif;pointer-events:auto;overflow:hidden;';
+            const header = document.createElement('div');
+            header.style.cssText = 'height:26px;display:flex;align-items:center;justify-content:space-between;'
+                + 'padding:0 7px;background:#493923;border-bottom:1px solid #ad9061;cursor:move;';
+            const title = document.createElement('span');
+            title.textContent = kind === 'guild' ? '行会' : (kind === 'party' ? '队伍' : '交易');
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.textContent = 'X';
+            close.style.cssText = 'width:24px;height:20px;color:#fff;background:#643c2f;'
+                + 'border:1px solid #ad9061;cursor:pointer;';
+            close.addEventListener('click', () => this._closeSocialPanel());
+            header.append(title, close);
+            const body = document.createElement('div');
+            body.style.cssText = 'padding:8px;max-height:455px;overflow:auto;display:flex;'
+                + 'flex-direction:column;gap:7px;';
+            win.append(header, body);
+            this.manager.winManager.container.appendChild(win);
+            this._makeWindowDraggable(win);
+            this.socialWindow = win;
+            this.socialBody = body;
+        }
+
+        const body = this.socialBody;
+        body.innerHTML = '';
+        const text = (value, color) => {
+            const line = document.createElement('div');
+            line.textContent = String(value ?? '');
+            line.style.cssText = 'line-height:17px;white-space:pre-wrap;'
+                + (color ? 'color:' + color + ';' : '');
+            body.appendChild(line);
+            return line;
+        };
+        const row = () => {
+            const el = document.createElement('div');
+            el.style.cssText = 'display:flex;gap:5px;align-items:center;flex-wrap:wrap;';
+            body.appendChild(el);
+            return el;
+        };
+        const field = (parent, placeholder, width = 150) => {
+            const el = document.createElement('input');
+            el.type = 'text';
+            el.placeholder = placeholder;
+            el.style.cssText = 'box-sizing:border-box;width:' + width + 'px;height:24px;'
+                + 'padding:2px 5px;background:#090807;color:#f5e4c4;border:1px solid #8c744b;'
+                + 'font:12px SimSun,serif;outline:none;';
+            parent.appendChild(el);
+            return el;
+        };
+        const button = (parent, label, action, disabled = false) => {
+            const el = document.createElement('button');
+            el.type = 'button';
+            el.textContent = label;
+            el.disabled = disabled;
+            el.style.cssText = 'min-width:58px;height:24px;padding:0 8px;background:#59452d;'
+                + 'color:#f5e4c4;border:1px solid #b29a68;font:12px SimSun,serif;cursor:pointer;'
+                + (disabled ? 'opacity:0.45;cursor:default;' : '');
+            el.addEventListener('click', action);
+            parent.appendChild(el);
+            return el;
+        };
+        const divider = () => {
+            const line = document.createElement('div');
+            line.style.cssText = 'height:1px;background:#594832;margin:2px 0;';
+            body.appendChild(line);
+        };
+        const sendChat = (type, input) => {
+            const value = input.value.trim();
+            if (!value) return;
+            this.conn.send(type, { text: value });
+            input.value = '';
+        };
+
+        if (kind === 'guild') {
+            const guild = this.guildState && this.guildState.guild;
+            if (guild) {
+                text(guild.name + '  会长：' + guild.masterName + '  成员：' + guild.memberCount);
+                text('成员：' + (guild.members || []).join('、'));
+                text('长老：' + ((guild.elders || []).join('、') || '无'));
+                text('同盟：' + ((guild.allyGuilds || []).join('、') || '无'));
+                text('敌对：' + ((guild.warGuilds || []).join('、') || '无'));
+                if (guild.ownsCastle) text('已占领沙巴克，城库金币：' + guild.castleGold, '#e6c06b');
+                const actions = row();
+                button(actions, '刷新', () => this.conn.send('guildInfo'));
+                button(actions, '退出行会', () => this.conn.send('leaveGuild'));
+                button(actions, '攻城', () => this.conn.send('siege'));
+                divider();
+                const warRow = row();
+                const target = field(warRow, '目标行会名称', 140);
+                button(warRow, '宣战', () => {
+                    if (target.value.trim()) this.conn.send('guildWar', { name: target.value.trim() });
+                });
+                button(warRow, '结盟', () => {
+                    if (target.value.trim()) this.conn.send('guildAlly', { name: target.value.trim() });
+                });
+                const chatRow = row();
+                const chat = field(chatRow, '行会聊天内容', 235);
+                button(chatRow, '发送', () => sendChat('guildChat', chat));
+            } else {
+                text('你目前没有加入行会。');
+                const createRow = row();
+                const newName = field(createRow, '新行会名称', 160);
+                button(createRow, '创建行会', () => {
+                    if (newName.value.trim()) this.conn.send('createGuild', { name: newName.value.trim() });
+                });
+                divider();
+                text('可加入的行会');
+                const available = this.guildState && this.guildState.availableGuilds || [];
+                if (!available.length) text('当前没有可加入的行会。');
+                for (const item of available) {
+                    const availableRow = row();
+                    text(item.name + '  会长：' + item.masterName + '  ' + item.memberCount + ' 人');
+                    button(availableRow, '申请加入', () => this.conn.send('joinGuild', { name: item.name }));
+                }
+            }
+        } else if (kind === 'party') {
+            const party = this.partyState;
+            if (!party) {
+                text('当前未组队。选择附近在线玩家名称即可发起组队。');
+            } else {
+                text('队长：' + ((party.members || []).find(m => m.id === party.leaderId)?.name || '未知'));
+                for (const member of party.members || []) {
+                    text(member.name + '  Lv.' + member.level + '  HP ' + member.hp + '/' + member.maxHp
+                        + '  ' + member.map + ' (' + member.x + ',' + member.y + ')');
+                }
+            }
+            const inviteRow = row();
+            const playerName = field(inviteRow, '玩家角色名', 175);
+            button(inviteRow, '邀请组队', () => {
+                if (playerName.value.trim()) this.conn.send('partyInvite', { name: playerName.value.trim() });
+            });
+            const actions = row();
+            button(actions, '刷新', () => this.conn.send('partyInfo'));
+            button(actions, '退出队伍', () => this.conn.send('partyLeave'), !party);
+            divider();
+            const chatRow = row();
+            const chat = field(chatRow, '队伍聊天内容', 235);
+            button(chatRow, '发送', () => sendChat('partyChat', chat), !party);
+        } else if (kind === 'trade') {
+            const pending = this.pendingTradeRequest;
+            const trade = this.tradeState;
+            if (pending) {
+                text(pending.fromName + ' 请求与你交易。');
+                const actions = row();
+                button(actions, '接受', () => this.conn.send('tradeAccept'));
+                button(actions, '拒绝', () => this.conn.send('tradeDecline'));
+            } else if (trade) {
+                text('正在与 ' + trade.otherName + ' 交易。');
+                text('你放入的物品：');
+                if (!(trade.selfItems || []).length) text('（空）');
+                for (const item of trade.selfItems || []) text(item.name + '  耐久 ' + item.durability + '/' + item.durabilityMax);
+                text('你的金币：' + trade.selfGold);
+                divider();
+                text('对方放入的物品：');
+                if (!(trade.otherItems || []).length) text('（空）');
+                for (const item of trade.otherItems || []) text(item.name + '  耐久 ' + item.durability + '/' + item.durabilityMax);
+                text('对方金币：' + trade.otherGold);
+                text('你的确认：' + (trade.selfConfirmed ? '已确认' : '未确认')
+                    + '；对方确认：' + (trade.otherConfirmed ? '已确认' : '未确认'),
+                trade.selfConfirmed && trade.otherConfirmed ? '#87cf87' : '#e6c06b');
+                divider();
+                text('背包物品（点击放入交易）');
+                for (const item of this.self && this.self.items || []) {
+                    const itemRow = row();
+                    text(item.name + ' ×1');
+                    button(itemRow, '放入', () => this.conn.send('tradeAddItem', { makeIndex: item.makeIndex }));
+                }
+                const goldRow = row();
+                const amount = field(goldRow, '金币数量', 100);
+                amount.inputMode = 'numeric';
+                button(goldRow, '放入金币', () => {
+                    const value = Number.parseInt(amount.value, 10);
+                    if (Number.isSafeInteger(value) && value > 0) this.conn.send('tradeAddGold', { amount: value });
+                });
+                const actions = row();
+                button(actions, '确认交易', () => this.conn.send('tradeConfirm'), trade.selfConfirmed);
+                button(actions, '取消交易', () => this.conn.send('tradeCancel'));
+            } else {
+                text('交易必须由双方玩家在线发起。对方接受后，才能放入物品和金币。');
+                const requestRow = row();
+                const playerName = field(requestRow, '交易对象角色名', 175);
+                button(requestRow, '发起交易', () => {
+                    if (playerName.value.trim()) this.conn.send('tradeRequest', { name: playerName.value.trim() });
+                });
+            }
+        }
     }
 
     _toggleStateWin() {
@@ -3271,6 +3519,9 @@ export class PlayScene extends Scene {
         this.shopSpotEl = null;
         this.shopGoldEl = null;
         this.shopSellItem = null;
+        this.socialWindow = null;
+        this.socialBody = null;
+        this.socialKind = null;
         this.pickedItem = null;
         this.pickedSource = null;   // 'bag' | 'equip'
         this.pickedSlot = -1;       // pickedSource === 'equip' 时的槽位号
