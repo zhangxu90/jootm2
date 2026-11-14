@@ -15,6 +15,18 @@ export async function loadResources() {
     _maps = data.maps || {};
     _wavs = data.wavs || {};
     _music = data.music || {};
+
+    const missingLibraries = ['tiles', 'smtiles', 'objects', 'hum', 'chrsel', 'prguse']
+        .filter(key => !_images[key]);
+    if (missingLibraries.length || Object.keys(_maps).length === 0) {
+        throw new Error('1.80 客户端资源不完整：缺少图像库 '
+            + (missingLibraries.join(', ') || '无')
+            + '；地图文件数量 ' + Object.keys(_maps).length
+            + '。请在资源根目录配置 Data（WIL/WIX）和 Map（.map）。');
+    }
+    if (Object.keys(_wavs).length === 0) {
+        console.warn('[resources] WAV 音效资源不存在；画面可加载，但原版声音无法完整复刻。');
+    }
     const firstWav = Object.values(_wavs)[0];
     if (firstWav) _wavDir = firstWav.split('/')[0] || 'Wav';
     return data;
