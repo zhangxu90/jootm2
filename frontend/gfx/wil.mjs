@@ -38,17 +38,32 @@ export class WIL {
         if (this.indexLoaded) return Promise.resolve();
         if (this._indexLoading) return this._indexLoading;
         this._indexLoading = (async () => {
-            const resp = await fetch(this.wixUrl);
-            if (!resp.ok) throw new Error(`加载 ${this.wixUrl} 失败`);
-            const buf = await resp.arrayBuffer();
-            const view = new DataView(buf);
-            this.imageCount = view.getUint32(44, true);
-            for (let i = 0; i < this.imageCount; i++) {
-                const off = view.getUint32(48 + i * 4, true);
-                this.offsetList[i] = off < 1080 ? 0 : off;
-                if (off >= 1080) this.sortedOffsets.push(off);
+            try {
+                const resp = await fetch(this.wixUrl);
+                if (!resp.ok) throw new Error(`加载 ${this.wixUrl} 失败（HTTP ${resp.status}）`);
+                const buf = await resp.arrayBuffer();
+                if (buf.byteLength < 48) throw new Error(`WIX 索引文件头不完整：${this.wixUrl}`);
+                const view = new DataView(buf);
+                const imageCount = view.getUint32(44, true);
+                if (48 + imageCount * 4 > buf.byteLength) {
+                    throw new Error(`WIX 索引条目不完整：${this.wixUrl}`);
+                }
+
+                const offsets = [];
+                const sortedOffsets = [];
+                for (let i = 0; i < imageCount; i++) {
+                    const off = view.getUint32(48 + i * 4, true);
+                    offsets[i] = off < 1080 ? 0 : off;
+                    if (off >= 1080) sortedOffsets.push(off);
+                }
+                this.imageCount = imageCount;
+                this.offsetList = offsets;
+                this.sortedOffsets = sortedOffsets;
+                this.indexLoaded = true;
+            } catch (error) {
+                this._indexLoading = null;
+                throw error;
             }
-            this.indexLoaded = true;
         })();
         return this._indexLoading;
     }
