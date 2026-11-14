@@ -71,13 +71,18 @@ export class SelectCharScene extends Scene {
     async _prgUrl(idx) {
         if (!this.prg) return null;
         if (this._prgCache.has(idx)) return this._prgCache.get(idx);
-        const tex = await this.prg.getTexture(idx);
-        if (!tex) return null;
-        const url = tex.canvas.toDataURL
-            ? tex.canvas.toDataURL('image/png')
-            : URL.createObjectURL(await tex.canvas.convertToBlob());
-        this._prgCache.set(idx, url);
-        return url;
+        try {
+            const tex = await this.prg.getTexture(idx);
+            if (!tex) return null;
+            const url = tex.canvas.toDataURL
+                ? tex.canvas.toDataURL('image/png')
+                : URL.createObjectURL(await tex.canvas.convertToBlob());
+            this._prgCache.set(idx, url);
+            return url;
+        } catch (error) {
+            console.warn('[select] unable to load Prguse image', idx, error);
+            return null;
+        }
     }
 
     // ChrSel 图 → canvas 纹理（懒加载，未加载返回 null 并异步触发）
@@ -87,6 +92,8 @@ export class SelectCharScene extends Scene {
         this.chr.getTexture(idx).then((texture) => {
             const entry = this._chrCache.get(idx);
             if (entry) entry.texture = texture || null;
+        }).catch((error) => {
+            console.warn('[select] unable to load ChrSel image', idx, error);
         });
         return null;
     }
@@ -204,7 +211,12 @@ export class SelectCharScene extends Scene {
         overlay.appendChild(win);
         this.root.appendChild(overlay);
 
-        const bgTex = this.prg ? await this.prg.getTexture(360) : null;
+        let bgTex = null;
+        try {
+            bgTex = this.prg ? await this.prg.getTexture(360) : null;
+        } catch (error) {
+            console.warn('[select] unable to load message dialog background', error);
+        }
         const bgUrl = await this._prgUrl(360);
         const width = bgTex && bgTex.canvas ? bgTex.canvas.width : 440;
         const height = bgTex && bgTex.canvas ? bgTex.canvas.height : 190;
