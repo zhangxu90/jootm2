@@ -250,6 +250,7 @@ public final class GameService {
         synchronized (world.lock) {
             Player p = findBySession(session);
             if (p != null) {
+                cleanupOnlineState(p);
                 persist(p);
                 world.removePlayer(p);
                 broadcastRemove(p);
@@ -3054,26 +3055,8 @@ public final class GameService {
         if (p == null) {
             return;
         }
-        TradeSession t = trades.remove(p.id);
-        if (t == null) {
-            return;
-        }
-        // 归还已放入的物品/金币
-        for (ItemInstance it : t.aItems) {
-            t.a.bag.add(it);
-        }
-        for (ItemInstance it : t.bItems) {
-            t.b.bag.add(it);
-        }
-        t.a.gold += t.aGold;
-        t.b.gold += t.bGold;
-        trades.remove(t.a.id);
-        trades.remove(t.b.id);
-        world.sendSystem(t.a, "交易取消。");
-        world.sendSystem(t.b, "交易取消。");
-        sendTradeClosed(t, "交易取消。");
-        sendBagUpdate(t.a);
-        sendBagUpdate(t.b);
+        TradeSession t = trades.get(p.id);
+        if (t != null) cancelTradeSession(t, "交易取消。");
     }
 
     private void tradeAddItem(PlayerSession session, JsonObject msg) {
@@ -3162,6 +3145,11 @@ public final class GameService {
     }
 
     private void executeTrade(TradeSession t) {
+        if (t.a.bag.size() + t.bItems.size() > 46
+                || t.b.bag.size() + t.aItems.size() > 46) {
+            cancelTradeSession(t, "交易失败：对方背包空间不足，交易已取消。");
+            return;
+        }
         for (ItemInstance it : t.aItems) {
             t.b.bag.add(it);
         }
@@ -3304,9 +3292,69 @@ public final class GameService {
         if (trade.b.session != null) trade.b.session.sendJson(message);
     }
 
+    private void cancelTradeSession(TradeSession trade, String reason) {
+        if (trade == null) return;
+        trades.remove(trade.a.id);
+        trades.remove(trade.b.id);
+        for (ItemInstance item : trade.aItems) trade.a.bag.add(item);
+        for (ItemInstance item : trade.bItems) trade.b.bag.add(item);
+        trade.a.gold += trade.aGold;
+        trade.b.gold += trade.bGold;
+        if (trade.a.session != null) world.sendSystem(trade.a, reason);
+        if (trade.b.session != null) world.sendSystem(trade.b, reason);
+        sendTradeClosed(trade, reason);
+        if (trade.a.session != null) {
+            sendBagUpdate(trade.a);
+            world.sendStats(trade.a, null);
+        }
+        if (trade.b.session != null) {
+            sendBagUpdate(trade.b);
+            world.sendStats(trade.b, null);
+        }
+    }
+
+    private void cleanupOnlineState(Player p) {
+        if (p == null) return;
+
+        // A disconnect must not strand a trade escrow: return every offered item and gold.
+        TradeSession activeTrade = trades.get(p.id);
+        if (activeTrade != null) {
+            cancelTradeSession(activeTrade, p.name + " 已离线，交易取消。");
+        }
+
+        // Remove any pending request sent by this player or addressed to this player.
+        Long requesterId = tradeRequests.remove(p.id);
+        if (requesterId != null) {
+            Actor requester = world.actor(requesterId);
+            if (requester instanceof Player) world.sendSystem((Player) requester,
+                    p.name + " 已离线，交易请求取消。");
+        }
+        List<Long> pendingTargets = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : tradeRequests.entrySet()) {
+            if (entry.getValue() != null && entry.getValue() == p.id) pendingTargets.add(entry.getKey());
+        }
+        for (Long targetId : pendingTargets) {
+            tradeRequests.remove(targetId);
+            Actor target = world.actor(targetId);
+            if (target instanceof Player) world.sendSystem((Player) target,
+                    p.name + " 已离线，交易请求取消。");
+        }
+
+        // Remove the leaver from the party and refresh all remaining members.
+        Party party = world.partyOf(p.id);
+        List<Long> partyMembers = party == null ? new ArrayList<>() : new ArrayList<>(party.memberIds);
+        if (party != null) world.leaveParty(p.id);
+        for (Long memberId : partyMembers) {
+            if (memberId == p.id) continue;
+            Actor member = world.actor(memberId);
+            if (member instanceof Player) sendPartyState((Player) member);
+        }
+    }
+
     private void logout(PlayerSession session) {
         Player p = findBySession(session);
         if (p != null) {
+            cleanupOnlineState(p);
             persist(p);
             world.removePlayer(p);
             broadcastRemove(p);
