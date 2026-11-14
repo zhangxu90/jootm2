@@ -35,6 +35,13 @@ export class MapActor {
         this.mapId = mapId;
     }
 
+    /** Apply all currently open doors from an enterGame/changeMap snapshot. */
+    applyDoorStates(doors) {
+        for (const door of doors || []) {
+            this.setDoorState(Number(door.x), Number(door.y), true);
+        }
+    }
+
     /** Apply the server's SM_DOORSTATE update to the matching MAP tile. */
     setDoorState(x, y, open) {
         const tile = this.map && this.map.tiles
