@@ -60,6 +60,7 @@ export class SelectCharScene extends Scene {
 
     onExit() {
         audio.stopBgm();
+        this._closeMessageDialog('cancel');
         if (this.root) this.root.remove();
         document.removeEventListener('keydown', this._keyHandler);
     }
@@ -68,6 +69,7 @@ export class SelectCharScene extends Scene {
 
     // Prguse 图 → img URL（缓存）
     async _prgUrl(idx) {
+        if (!this.prg) return null;
         if (this._prgCache.has(idx)) return this._prgCache.get(idx);
         const tex = await this.prg.getTexture(idx);
         if (!tex) return null;
@@ -168,16 +170,119 @@ export class SelectCharScene extends Scene {
         else this._msg('你可以为每个单独的帐户创建两个角色。');
     }
 
-    _erase() {
-        const c = this.chars[this.selected];
-        if (c && window.confirm(`"${c.name}" 删除的角色是不能被恢复的。\n你真的想要删除角色吗？`)) {
-            this.conn.send('deleteCharacter', { name: c.name });
+    async _erase() {
+        const character = this.chars[this.selected];
+        if (!character) return;
+        const result = await this._msg(
+            '"' + character.name + '" 删除后不能恢复。\n真的要删除这个角色吗？',
+            ['no', 'yes']);
+        if (result === 'yes') {
+            this.conn.send('deleteCharacter', { name: character.name });
         }
     }
 
-    _msg(text) {
-        // 原版 DMessageDlg 消息框（简化：浏览器 alert）
-        window.alert(text);
+    _closeMessageDialog(result = 'cancel') {
+        const dialog = this._messageDialog;
+        if (!dialog) return;
+        this._messageDialog = null;
+        document.removeEventListener('keydown', dialog.keyHandler);
+        if (dialog.overlay.isConnected) dialog.overlay.remove();
+        dialog.resolve(result);
+    }
+
+    async _msg(message, buttons = ['ok']) {
+        this._closeMessageDialog('replaced');
+        const overlay = document.createElement('div');
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', '游戏消息');
+        overlay.style.cssText = 'position:absolute;inset:0;z-index:10000;pointer-events:auto;';
+
+        const win = document.createElement('div');
+        win.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'
+            + 'overflow:visible;image-rendering:pixelated;';
+        overlay.appendChild(win);
+        this.root.appendChild(overlay);
+
+        const bgTex = this.prg ? await this.prg.getTexture(360) : null;
+        const bgUrl = await this._prgUrl(360);
+        const width = bgTex && bgTex.canvas ? bgTex.canvas.width : 440;
+        const height = bgTex && bgTex.canvas ? bgTex.canvas.height : 190;
+        win.style.width = width + 'px';
+        win.style.height = height + 'px';
+        if (bgUrl) {
+            win.style.backgroundImage = 'url("' + bgUrl + '")';
+            win.style.backgroundRepeat = 'no-repeat';
+            win.style.backgroundSize = '100% 100%';
+        } else {
+            win.style.background = 'rgba(22, 17, 12, 0.96)';
+            win.style.border = '2px solid #a78a57';
+            win.style.boxShadow = '0 4px 20px #000';
+        }
+
+        const text = document.createElement('div');
+        text.textContent = String(message || '').split(/\\|\r?\n/).join('\n');
+        text.style.cssText = 'position:absolute;left:39px;top:38px;right:39px;'
+            + 'color:#fff;font:12px/14px SimSun,serif;white-space:pre-wrap;'
+            + 'text-shadow:1px 1px #000;pointer-events:none;';
+        win.appendChild(text);
+
+        const buttonDefs = {
+            ok: { index: 361, label: '确定' },
+            yes: { index: 363, label: '是' },
+            cancel: { index: 365, label: '取消' },
+            no: { index: 367, label: '否' },
+        };
+        const requested = Array.from(new Set(buttons)).filter(key => buttonDefs[key]);
+        const ordered = ['cancel', 'no', 'yes', 'ok'].filter(key => requested.includes(key));
+        const promise = new Promise(resolve => {
+            const dialog = { overlay, resolve, keyHandler: null };
+            dialog.keyHandler = event => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this._closeMessageDialog(requested.includes('no') ? 'no'
+                        : (requested.includes('cancel') ? 'cancel' : 'ok'));
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this._closeMessageDialog(requested.includes('yes') ? 'yes' : 'ok');
+                }
+            };
+            this._messageDialog = dialog;
+            document.addEventListener('keydown', dialog.keyHandler);
+        });
+
+        let left = 324;
+        for (const key of ordered) {
+            const def = buttonDefs[key];
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.setAttribute('aria-label', def.label);
+            button.style.cssText = 'position:absolute;left:' + left + 'px;top:126px;'
+                + 'width:80px;height:22px;padding:0;border:0;background:transparent;cursor:pointer;';
+            const image = document.createElement('img');
+            image.alt = def.label;
+            image.draggable = false;
+            image.style.cssText = 'display:block;width:100%;height:100%;image-rendering:pixelated;';
+            const up = await this._prgUrl(def.index);
+            const down = await this._prgUrl(def.index + 1);
+            image.src = up || '';
+            button.appendChild(image);
+            if (!up) {
+                button.textContent = def.label;
+                button.style.cssText += 'background:#5b472b;color:#fff;border:1px solid #c6a56c;';
+            }
+            button.addEventListener('pointerdown', () => { if (down) image.src = down; });
+            const restore = () => { if (up) image.src = up; };
+            button.addEventListener('pointerup', restore);
+            button.addEventListener('pointerleave', restore);
+            button.addEventListener('click', () => this._closeMessageDialog(key));
+            win.appendChild(button);
+            left -= 110;
+        }
+
+        const firstButton = win.querySelector('button');
+        if (firstButton) firstButton.focus();
+        return promise;
     }
 
     // ---- 建角窗口（DCreateChr） --------------------------------------------
