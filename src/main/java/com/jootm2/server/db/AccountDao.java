@@ -88,6 +88,44 @@ public final class AccountDao {
         return null;
     }
 
+    /**
+     * Verifies the current password and atomically replaces its salt/hash.
+     * Returns false for an unknown account, wrong current password, or concurrent change.
+     */
+    public boolean changePassword(String username, String currentPassword, String newPassword) {
+        if (username == null || currentPassword == null || newPassword == null) {
+            return false;
+        }
+        Account account = find(username);
+        if (account == null) {
+            return false;
+        }
+
+        String expectedHash = DbUtil.hashPassword(account.salt, currentPassword);
+        if (!java.security.MessageDigest.isEqual(
+                expectedHash.getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+                account.passwordHash.getBytes(java.nio.charset.StandardCharsets.US_ASCII))) {
+            return false;
+        }
+
+        String newSalt = DbUtil.newSalt();
+        String newHash = DbUtil.hashPassword(newSalt, newPassword);
+        Connection c = db.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE accounts SET password_hash = ?, salt = ? WHERE id = ? AND password_hash = ? AND salt = ?")) {
+                ps.setString(1, newHash);
+                ps.setString(2, newSalt);
+                ps.setLong(3, account.id);
+                ps.setString(4, account.passwordHash);
+                ps.setString(5, account.salt);
+                return ps.executeUpdate() == 1;
+            } catch (SQLException e) {
+                throw new RuntimeException("change account password failed", e);
+            }
+        }
+    }
+
     public boolean exists(String username) {
         return find(username) != null;
     }
