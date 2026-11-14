@@ -1139,7 +1139,9 @@ export class PlayScene extends Scene {
             case 'attack': {
                 const a = this.entities.get(msg.attackerId);
                 const target = this.entities.get(msg.targetId);
-                if (a && this.self && a.id === this.self.id && a.type === 'player' && !msg.noAttackAnim) {
+                if (a && a.type === 'player' && !msg.noAttackAnim) {
+                    // Every visible player uses the same weapon-class swing sound; local-only inputs
+                    // are not enough because remote players' attacks are also animated on this client.
                     void audio.playSound(weaponSoundIndex(a.weapon));
                     if (msg.swordHit === 'longHit' || msg.swordHit === 'long') void audio.playSound(132);
                     else if (msg.swordHit === 'wideHit' || msg.swordHit === 'wide') void audio.playSound(133);
@@ -1148,14 +1150,17 @@ export class PlayScene extends Scene {
                     else if (msg.swordHit === 'powerHit' || msg.swordHit === 'power') {
                         void audio.playSound(this.self.sex === 0 ? 130 : 131);
                     }
-                } else if (a && target && this.self && target.id === this.self.id) {
-                    if (a.type === 'monster') {
-                        const appearance = Math.max(0, Number(a.appr) || 0);
-                        void audio.playSound(200 + appearance * 10 + 2);
-                    } else {
-                        const hitSound = struckSoundIndex(a, target);
-                        if (hitSound >= 0) void audio.playSound(hitSound);
-                    }
+                } else if (a && a.type === 'monster') {
+                    const appearance = Math.max(0, Number(a.appr) || 0);
+                    void audio.playSound(200 + appearance * 10 + 2);
+                }
+                if (a && target && this.self && target.id === this.self.id && a.type === 'player') {
+                    const hitSound = struckSoundIndex(a, target);
+                    if (hitSound >= 0) void audio.playSound(hitSound);
+                }
+                if (a && this.self && a.id === this.self.id && msg.magicId) {
+                    // Legacy magic sound is split into start, flight and explosion IDs.
+                    void audio.playSound(10000 + Number(msg.magicId) * 10 + 2);
                 }
                 // noAttackAnim：冲撞等不触发攻击者攻击动作（只播目标受击，对齐原版 RM_STRUCK）
                 if (a && !msg.noAttackAnim) {
@@ -1211,9 +1216,11 @@ export class PlayScene extends Scene {
             }
             case 'spellCast': {
                 const c = this.entities.get(msg.casterId);
-                if (c && c.type === 'player' && this.self && c.id === this.self.id
-                    && Number(msg.magicId) > 0) {
-                    void audio.playSound(10000 + Number(msg.magicId) * 10);
+                if (c && c.type !== 'npc' && Number(msg.magicId) > 0) {
+                    const serial = Number(msg.magicId);
+                    void audio.playSound(10000 + serial * 10);
+                    // The Delphi client plays the projectile sound after the cast animation begins.
+                    window.setTimeout(() => { void audio.playSound(10000 + serial * 10 + 1); }, 120);
                 }
                 // 施法动作（HA.spell 段，与普通攻击 hit 段不同）；怪物施法者不覆盖——
                 // 神兽吐火等由 attack 消息设置攻击动画（ActAttack 两足站立喷火），避免被 spell→stand 回退覆盖
