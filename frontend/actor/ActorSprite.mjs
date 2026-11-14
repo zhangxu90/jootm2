@@ -18,6 +18,64 @@ export class ActorSprite {
         this._phase = ((entity.id || 0) % 1000) * 37;
         this._tex = new Map();      // 'lib/index' -> {canvas,px,py} 或 null
         this._loading = new Set();  // 已触发加载的 key（防重复）
+        this._preloaded = false;
+    }
+
+    /**
+     * 预取角色/怪物常用站立与行走动画帧（8 方向）。
+     * 请求优先级低于当前实际渲染帧和地图可视瓦片，不会抢占关键帧带宽。
+     */
+    preloadCommon(priority = 50) {
+        if (this._preloaded) return;
+        this._preloaded = true;
+
+        const e = this.entity;
+        const original = {
+            action: e._action,
+            actionAt: e._actionAt,
+            dir: e.dir,
+        };
+
+        try {
+            let segments;
+            if (e.type === 'player') segments = A.HA;
+            else if (e.type === 'npc') segments = A.npcAction(e.appr);
+            else segments = A.raceByPM(e.raceImg);
+            if (!segments) return;
+
+            const actions = e.type === 'player' ? ['stand', 'walk'] : ['stand', 'walk'];
+            for (const action of actions) {
+                const segmentName = e.type === 'player' ? (PLAYER_SEG[action] || 'stand')
+                    : (MON_SEG[action] || 'stand');
+                const segment = segments[segmentName] || segments.stand;
+                if (!segment) continue;
+                const frameInfo = A.actionFrames(0, segment, 0);
+                const count = Math.min(frameInfo.count || 1, action === 'stand' ? 4 : 6);
+                if (count <= 0) continue;
+
+                e._action = action;
+                e._actionAt = 0;
+                for (let dir = 0; dir < 8; dir++) {
+                    e.dir = dir;
+                    for (let frame = 0; frame < count; frame++) {
+                        let simulatedNow = frame * Math.max(1, frameInfo.ftime || 1);
+                        if (action === 'stand') {
+                            simulatedNow -= this._phase;
+                            while (simulatedNow < 0) simulatedNow += Math.max(1, frameInfo.ftime || 1) * count;
+                        }
+                        const spec = this._frameSpec(simulatedNow);
+                        if (!spec) continue;
+                        for (const item of spec) this._texture(item.lib, item.index, priority);
+                    }
+                }
+            }
+        } catch (error) {
+            console.debug('[sprite] common animation prefetch skipped:', error);
+        } finally {
+            e._action = original.action;
+            e._actionAt = original.actionAt;
+            e.dir = original.dir;
+        }
     }
 
     /** 返回当前帧的绘制层 [{canvas,px,py}]；未加载返回 null。 */
@@ -106,7 +164,7 @@ export class ActorSprite {
     }
 
     // 取纹理（同步返回已加载，未加载触发异步并返回 null）
-    _texture(lib, index) {
+    _texture(lib, index, priority = 95) {
         const key = lib + '/' + index;
         if (this._tex.has(key)) return this._tex.get(key);
         const wlib = getLib(lib);
