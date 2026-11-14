@@ -1,7 +1,7 @@
 // Web Audio implementation of the original Mir2 sound-list contract.
 // Sound effects are addressed by sound.lst index; WAV files are resolved by basename
 // through resources.json. Scene music uses the original WAV filenames.
-import { soundListUrl, wavUrl } from '../gfx/resource.mjs';
+import { soundListUrl, wavUrl, musicUrl } from '../gfx/resource.mjs';
 
 const SETTINGS_KEY = 'jootm2.audio.v1';
 const MAX_EFFECT_VOICES = 48;
@@ -49,6 +49,9 @@ export class AudioManager {
         this._musicSource = null;
         this._musicGain = null;
         this._currentMusic = null;
+        this._desiredMapMusicId = -1;
+        this._mapMusicAudio = null;
+        this._mapMusicId = -1;
 
         // Browsers require a user gesture before audio can start. Keep the requested
         // login BGM queued and resume it after the first pointer/key interaction.
@@ -97,8 +100,10 @@ export class AudioManager {
         this._musicEnabled = Boolean(enabled);
         if (!this._musicEnabled) {
             this._stopMusicSource();
-        } else if (this._desiredMusic) {
-            void this.playBgm(this._desiredMusic);
+            this._stopMapMusicAudio();
+        } else {
+            if (this._desiredMusic) void this.playBgm(this._desiredMusic);
+            if (this._desiredMapMusicId >= 0) void this._startMapMusic(this._desiredMapMusicId);
         }
         this._saveSettings();
     }
@@ -122,6 +127,10 @@ export class AudioManager {
             if (this.context.state === 'running' && this._desiredMusic
                 && this._musicEnabled && !this._musicSource) {
                 void this._startMusic(this._desiredMusic);
+            }
+            if (this.context.state === 'running' && this._desiredMapMusicId >= 0
+                && this._musicEnabled) {
+                void this._startMapMusic(this._desiredMapMusicId);
             }
             return this.context.state === 'running';
         } catch (error) {
@@ -299,9 +308,81 @@ export class AudioManager {
         this._stopMusicSource();
     }
 
+    /** Play the original MapInfo.txt MUSIC(n) track from Music/n.mp3. */
+    async playMapMusic(musicId) {
+        const id = Number(musicId);
+        this._desiredMapMusicId = Number.isSafeInteger(id) && id >= 0 ? id : -1;
+        if (this._desiredMapMusicId < 0 || !this._musicEnabled) {
+            this._stopMapMusicAudio();
+            return false;
+        }
+        return this._startMapMusic(this._desiredMapMusicId);
+    }
+
+    async _startMapMusic(musicId) {
+        if (!this._musicEnabled || musicId < 0) return false;
+        if (this._mapMusicId === musicId && this._mapMusicAudio) {
+            try {
+                await this._mapMusicAudio.play();
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        this._stopMapMusicAudio();
+        const url = musicUrl(musicId);
+        if (!url || typeof window === 'undefined' || typeof window.Audio !== 'function') return false;
+
+        const element = new window.Audio(url);
+        element.preload = 'auto';
+        element.loop = false; // Legacy TMPEG map music is played once, not as a looping WAV BGM.
+        element.volume = this._musicVolume;
+        this._mapMusicAudio = element;
+        this._mapMusicId = musicId;
+        element.addEventListener('ended', () => {
+            if (this._mapMusicAudio === element) {
+                this._mapMusicAudio = null;
+                this._mapMusicId = -1;
+            }
+        }, { once: true });
+        element.addEventListener('error', () => {
+            if (this._mapMusicAudio === element) {
+                this._mapMusicAudio = null;
+                this._mapMusicId = -1;
+            }
+            console.warn('[audio] unable to play map music:', url);
+        }, { once: true });
+        try {
+            await element.play();
+            return true;
+        } catch (error) {
+            // A later user gesture can retry through unlock().
+            console.debug('[audio] map music is waiting for a user gesture:', error);
+            return false;
+        }
+    }
+
+    _stopMapMusicAudio() {
+        const element = this._mapMusicAudio;
+        this._mapMusicAudio = null;
+        this._mapMusicId = -1;
+        if (element) {
+            element.pause();
+            element.removeAttribute('src');
+            element.load();
+        }
+    }
+
+    stopMapMusic() {
+        this._desiredMapMusicId = -1;
+        this._stopMapMusicAudio();
+    }
+
     destroy() {
         this.stopEffects();
         this.stopBgm();
+        this.stopMapMusic();
         if (this.context && this.context.state !== 'closed') {
             void this.context.close().catch(() => {});
         }
