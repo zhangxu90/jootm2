@@ -5,6 +5,7 @@
 // 按钮照原版 TDButton + SetImgIndex（Prguse 图），坐标照 FState.pas。
 
 import { Scene } from '../scene/Scene.mjs';
+import { audio } from '../audio/AudioManager.mjs';
 import { SelectCharScene } from './SelectCharScene.mjs';
 import { getLib } from '../image/Images.mjs';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../core/config.mjs';
@@ -65,6 +66,7 @@ export class LoginScene extends Scene {
     }
 
     onEnter() {
+        void audio.playBgm('log-in-long2');
         const gui = this.manager.winManager.container;
         gui.innerHTML = '';
         this.root = document.createElement('div');
@@ -74,6 +76,7 @@ export class LoginScene extends Scene {
     }
 
     onExit() {
+        audio.stopBgm();
         if (this.root) this.root.remove();
     }
 
