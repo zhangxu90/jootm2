@@ -90,3 +90,34 @@ test('queued overlapping ranges are deduplicated and inherit the highest priorit
         globalThis.fetch = originalFetch;
     }
 });
+
+test('partially overlapping ranges are not deduplicated when coverage is incomplete', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests = [];
+    globalThis.fetch = (url, options) => {
+        const gate = deferred();
+        requests.push({ range: options.headers.Range, gate });
+        return gate.promise;
+    };
+
+    try {
+        const scheduler = new RangeScheduler(1);
+        const active = scheduler.schedule('/test.wil', 0, 15, 10);
+        const partial = scheduler.schedule('/test.wil', 8, 23, 90);
+
+        assert.equal(scheduler.stats().queue, 1);
+        assert.equal(scheduler.stats().deduped, 0);
+
+        requests[0].gate.resolve(fakeResponse());
+        await active;
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(requests.length, 2);
+        assert.equal(requests[1].range, 'bytes=8-23');
+
+        requests[1].gate.resolve(fakeResponse());
+        const result = await partial;
+        assert.equal(result.start, 8);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
