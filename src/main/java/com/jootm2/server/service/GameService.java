@@ -3443,7 +3443,16 @@ public final class GameService {
             tradeRequestAt.remove(targetId);
             Actor target = world.actor(targetId);
             Actor requester = requesterId == null ? null : world.actor(requesterId);
-            if (target instanceof Player) world.sendSystem((Player) target, "交易请求已超时。");
+            if (target instanceof Player) {
+                Player recipient = (Player) target;
+                world.sendSystem(recipient, "交易请求已超时。");
+                if (recipient.session != null) {
+                    JsonObject closed = new JsonObject();
+                    closed.addProperty("type", "tradeClosed");
+                    closed.addProperty("reason", "交易请求已超时。");
+                    recipient.session.sendJson(closed);
+                }
+            }
             if (requester instanceof Player) {
                 Player from = (Player) requester;
                 world.sendSystem(from, "发给 " + (target instanceof Player ? ((Player) target).name : "目标玩家")
