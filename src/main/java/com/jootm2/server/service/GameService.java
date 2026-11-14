@@ -60,7 +60,8 @@ public final class GameService {
     private final AtomicLong itemSeq = new AtomicLong(1_000_000L);
 
     // 交易状态
-    private final Map<Long, Long> tradeRequests = new HashMap<>();   // targetId -> requesterId
+    private final Map<Long, Long> tradeRequests = new HashMap<>();
+    private final Map<Long, Long> partyRequests = new HashMap<>();   // targetId -> requesterId
     private final Map<Long, TradeSession> trades = new HashMap<>();  // playerId -> session
 
     public GameService(ServerConfig config, Database database) throws SQLException {
@@ -203,6 +204,12 @@ public final class GameService {
                     break;
                 case "partyInvite":
                     partyInvite(session, msg);
+                    break;
+                case "partyAccept":
+                    partyAccept(session);
+                    break;
+                case "partyDecline":
+                    partyDecline(session);
                     break;
                 case "partyLeave":
                     partyLeave(session);
@@ -2809,34 +2816,90 @@ public final class GameService {
 
     private void partyInvite(PlayerSession session, JsonObject msg) {
         Player p = findBySession(session);
-        if (p == null) {
-            return;
-        }
+        if (p == null) return;
+
         String targetName = str(msg, "name");
-        if (targetName == null || targetName.isEmpty()) {
-            return;
-        }
-        Player target = world.player(targetName);
+        if (targetName == null || targetName.trim().isEmpty()) return;
+        Player target = world.player(targetName.trim());
         if (target == null || !target.alive) {
             world.sendSystem(p, "玩家不在线。");
             return;
         }
-        Party party = world.partyOf(p.id);
-        if (party != null) {
-            if (world.joinParty(target.id, party.leaderId())) {
-                world.sendSystem(p, target.name + " 加入了队伍。");
-                world.sendSystem(target, "你加入了 " + p.name + " 的队伍。");
-                broadcastPartyState(world.partyOf(p.id));
-            } else {
-                world.sendSystem(p, "邀请失败（对方已在队伍中）。");
-                sendPartyState(p);
-            }
-        } else {
-            world.createParty(p.id, target.id);
-            world.sendSystem(p, "你和 " + target.name + " 组成了队伍。");
-            world.sendSystem(target, "你和 " + p.name + " 组成了队伍。");
-            broadcastPartyState(world.partyOf(p.id));
+        if (target.id == p.id) {
+            world.sendSystem(p, "不能邀请自己入队。");
+            return;
         }
+        if (target.map != p.map || p.distanceTo(target) > 10) {
+            world.sendSystem(p, "组队对象必须在同一地图且距离 10 格以内。");
+            return;
+        }
+        Party existing = world.partyOf(p.id);
+        if (existing != null && existing.leaderId() != p.id) {
+            world.sendSystem(p, "只有队长可以邀请新成员。");
+            return;
+        }
+        if (world.partyOf(target.id) != null) {
+            world.sendSystem(p, "对方已经有队伍。");
+            return;
+        }
+        if (partyRequests.containsKey(target.id)) {
+            world.sendSystem(p, "对方已有待处理的组队邀请。");
+            return;
+        }
+
+        partyRequests.put(target.id, p.id);
+        world.sendSystem(p, "已向 " + target.name + " 发出组队邀请，等待对方接受。");
+        JsonObject request = new JsonObject();
+        request.addProperty("type", "partyInviteReceived");
+        request.addProperty("fromId", p.id);
+        request.addProperty("fromName", p.name);
+        if (target.session != null) target.session.sendJson(request);
+    }
+
+    private void partyAccept(PlayerSession session) {
+        Player target = findBySession(session);
+        if (target == null) return;
+        Long leaderId = partyRequests.remove(target.id);
+        if (leaderId == null) {
+            world.sendSystem(target, "没有待接受的组队邀请。");
+            return;
+        }
+        Actor inviterActor = world.actor(leaderId);
+        if (!(inviterActor instanceof Player)) {
+            world.sendSystem(target, "邀请人已离线，组队邀请失效。");
+            return;
+        }
+        Player inviter = (Player) inviterActor;
+        if (!inviter.alive || inviter.map != target.map || inviter.distanceTo(target) > 10
+                || world.partyOf(target.id) != null) {
+            world.sendSystem(target, "组队邀请已失效，双方必须在同一地图且距离 10 格以内。");
+            world.sendSystem(inviter, target.name + " 无法加入队伍。");
+            return;
+        }
+
+        Party party = world.partyOf(inviter.id);
+        if (party == null) {
+            world.createParty(inviter.id, target.id);
+        } else if (!world.joinParty(target.id, inviter.id)) {
+            world.sendSystem(target, "加入队伍失败。");
+            world.sendSystem(inviter, target.name + " 加入队伍失败。");
+            return;
+        }
+        world.sendSystem(inviter, target.name + " 加入了队伍。");
+        world.sendSystem(target, "你加入了 " + inviter.name + " 的队伍。");
+        broadcastPartyState(world.partyOf(inviter.id));
+    }
+
+    private void partyDecline(PlayerSession session) {
+        Player target = findBySession(session);
+        if (target == null) return;
+        Long inviterId = partyRequests.remove(target.id);
+        if (inviterId == null) return;
+        Actor inviterActor = world.actor(inviterId);
+        if (inviterActor instanceof Player) {
+            world.sendSystem((Player) inviterActor, target.name + " 拒绝了组队邀请。");
+        }
+        world.sendSystem(target, "你拒绝了组队邀请。");
     }
 
     private void partyLeave(PlayerSession session) {
@@ -3329,6 +3392,23 @@ public final class GameService {
             if (requester instanceof Player) world.sendSystem((Player) requester,
                     p.name + " 已离线，交易请求取消。");
         }
+        Long partyInviterId = partyRequests.remove(p.id);
+        if (partyInviterId != null) {
+            Actor inviter = world.actor(partyInviterId);
+            if (inviter instanceof Player) world.sendSystem((Player) inviter,
+                    p.name + " 已离线，组队邀请取消。");
+        }
+        List<Long> partyTargets = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : partyRequests.entrySet()) {
+            if (entry.getValue() != null && entry.getValue() == p.id) partyTargets.add(entry.getKey());
+        }
+        for (Long targetId : partyTargets) {
+            partyRequests.remove(targetId);
+            Actor target = world.actor(targetId);
+            if (target instanceof Player) world.sendSystem((Player) target,
+                    p.name + " 已离线，组队邀请取消。");
+        }
+
         List<Long> pendingTargets = new ArrayList<>();
         for (Map.Entry<Long, Long> entry : tradeRequests.entrySet()) {
             if (entry.getValue() != null && entry.getValue() == p.id) pendingTargets.add(entry.getKey());
