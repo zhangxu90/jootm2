@@ -4,6 +4,7 @@
 let _images = null;   // { key: { x: wix路径, l: wil路径 } }
 let _maps = null;     // { mapId: map路径 }
 let _wavs = null;     // { soundId: wav路径 }
+let _wavDir = 'Wav';
 
 export async function loadResources() {
     const resp = await fetch('/resources/resources.json');
@@ -12,6 +13,8 @@ export async function loadResources() {
     _images = data.images || {};
     _maps = data.maps || {};
     _wavs = data.wavs || {};
+    const firstWav = Object.values(_wavs)[0];
+    if (firstWav) _wavDir = firstWav.split('/')[0] || 'Wav';
     return data;
 }
 
@@ -37,4 +40,9 @@ export function wavUrl(soundId) {
 // 音频总数
 export function wavCount() {
     return _wavs ? Object.keys(_wavs).length : 0;
+}
+
+// Original sound.lst lives beside the WAV files and maps sparse numeric IDs to filenames.
+export function soundListUrl() {
+    return `/resources/${_wavDir}/sound.lst`;
 }
