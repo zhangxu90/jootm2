@@ -102,6 +102,9 @@ public final class GameService {
                 case "register":
                     register(session, msg);
                     break;
+                case "changePassword":
+                    changePassword(session, msg);
+                    break;
                 case "listCharacters":
                     listCharacters(session);
                     break;
@@ -287,6 +290,31 @@ public final class GameService {
             }
         }
         session.sendJson(r);
+    }
+
+    /** Password change is available before login, but always requires the current password. */
+    private void changePassword(PlayerSession session, JsonObject msg) {
+        String username = str(msg, "username");
+        String currentPassword = str(msg, "currentPassword");
+        String newPassword = str(msg, "newPassword");
+        JsonObject response = new JsonObject();
+        response.addProperty("type", "changePasswordResult");
+
+        if (username == null || username.trim().isEmpty()
+                || currentPassword == null || newPassword == null
+                || newPassword.length() < 4 || newPassword.length() > 64) {
+            response.addProperty("ok", false);
+            response.addProperty("error", "请输入正确的账号和密码（新密码至少4位，最多64位）。");
+        } else if (currentPassword.equals(newPassword)) {
+            response.addProperty("ok", false);
+            response.addProperty("error", "新密码不能与当前密码相同。");
+        } else if (!accountDao.changePassword(username.trim(), currentPassword, newPassword)) {
+            response.addProperty("ok", false);
+            response.addProperty("error", "账号或当前密码错误，请检查后重试。");
+        } else {
+            response.addProperty("ok", true);
+        }
+        session.sendJson(response);
     }
 
     private void listCharacters(PlayerSession session) {
