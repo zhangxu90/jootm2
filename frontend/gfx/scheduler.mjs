@@ -26,7 +26,7 @@ export class RangeScheduler {
 
         // 1. 已经在下载的覆盖请求：挂接消费者，不额外占用并发额度。
         for (const active of this.active) {
-            if (active.url === url && active.start <= start && start < active.end) {
+            if (active.url === url && active.start <= start && active.end >= end) {
                 this.dedupedRequests++;
                 return new Promise((resolve, reject) => {
                     active.consumers.push({ ...consumer, resolve, reject });
@@ -36,7 +36,7 @@ export class RangeScheduler {
 
         // 2. 已在队列等待的覆盖请求：合并消费者，并提升到更高优先级。
         for (const queued of this.queue) {
-            if (queued.url === url && queued.start <= start && start < queued.end) {
+            if (queued.url === url && queued.start <= start && queued.end >= end) {
                 this.dedupedRequests++;
                 queued.priority = Math.max(queued.priority, requestPriority);
                 const promise = new Promise((resolve, reject) => {
