@@ -38,6 +38,7 @@ jobs:
           set -euo pipefail
           find frontend -type f -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
           node --test frontend/audio/*.test.mjs frontend/gfx/*.test.mjs frontend/map/*.test.mjs
+          node scripts/check-protocol-contract.mjs
           node --input-type=module -e "import('./frontend/audio/AudioManager.mjs').then(() => console.log('Audio module import passed'))"
 
       - name: Build Java server
