@@ -239,7 +239,7 @@ export class AudioManager {
     }
 
     async playBgm(baseName) {
-        const name = String(baseName || '').replace(/\\.[^.]+$/, '').toLowerCase();
+        const name = String(baseName || '').replace(/\.[^.]+$/, '').toLowerCase();
         this._desiredMusic = name || null;
         if (!name || !this._musicEnabled) {
             this._stopMusicSource();
