@@ -171,6 +171,114 @@ const MAGIC_VFX = {
     20: { hit: 'temptation' },                         // 诱惑之光（目标头顶特效）
 };
 
+
+const WEAPON_SOUND_GROUPS = {
+    short: new Set([6, 20]),
+    wooden: new Set([1]),
+    sword: new Set([2, 13, 9, 5, 14, 22]),
+    dao: new Set([4, 17, 10, 15, 16, 23]),
+    axe: new Set([3, 7, 11]),
+    club: new Set([24]),
+    long: new Set([8, 12, 18, 21]),
+};
+
+function weaponSoundIndex(weaponLooks) {
+    const weapon = Math.floor((Number(weaponLooks) || 0) / 2);
+    if (WEAPON_SOUND_GROUPS.short.has(weapon)) return 50;
+    if (WEAPON_SOUND_GROUPS.wooden.has(weapon)) return 51;
+    if (WEAPON_SOUND_GROUPS.sword.has(weapon)) return 52;
+    if (WEAPON_SOUND_GROUPS.dao.has(weapon)) return 53;
+    if (WEAPON_SOUND_GROUPS.axe.has(weapon)) return 54;
+    if (WEAPON_SOUND_GROUPS.club.has(weapon)) return 55;
+    if (WEAPON_SOUND_GROUPS.long.has(weapon)) return 56;
+    return 57;
+}
+
+function struckSoundIndex(attacker, target) {
+    if (!attacker || attacker.type !== 'player') return -1;
+    const weapon = Math.floor((Number(attacker.weapon) || 0) / 2);
+    const targetHasArmor = target && target.type === 'player'
+        && Math.floor((Number(target.dress) || 0) / 2) === 3;
+    const base = targetHasArmor ? 80 : 70;
+    if (WEAPON_SOUND_GROUPS.sword.has(weapon) || WEAPON_SOUND_GROUPS.wooden.has(weapon)
+        || WEAPON_SOUND_GROUPS.short.has(weapon) || WEAPON_SOUND_GROUPS.dao.has(weapon)) return base;
+    if (WEAPON_SOUND_GROUPS.axe.has(weapon)) return base + 1;
+    if (WEAPON_SOUND_GROUPS.long.has(weapon)) return base + 2;
+    return base + 3;
+}
+
+function itemClickSoundIndex(item) {
+    if (!item) return 118;
+    const mode = Number(item.stdMode) || 0;
+    if (mode === 0 || mode === 31) return 108;
+    if (mode === 5 || mode === 6) return 111;
+    if (mode === 10 || mode === 11) return 112;
+    if (mode === 22 || mode === 23) return 113;
+    if (mode === 24 || mode === 26) {
+        const name = String(item.name || '');
+        return name.includes('手镯') || name.includes('手套') ? 117 : 114;
+    }
+    if (mode === 19 || mode === 20 || mode === 21) return 115;
+    if (mode === 15) return 116;
+    return 118;
+}
+
+function itemUseSoundIndex(item) {
+    if (!item) return -1;
+    const mode = Number(item.stdMode) || 0;
+    if (mode === 0 || mode === 31) return 108;
+    if (mode === 1 || mode === 2) return 107;
+    return -1;
+}
+
+function inRanges(value, ranges) {
+    return ranges.some(([min, max]) => value >= min && value <= max);
+}
+
+function footstepSoundBase(map, x, y) {
+    if (!map || !map.tiles) return 1;
+    const tileX = Math.max(0, Math.floor(x / 2) * 2);
+    const tileY = Math.max(0, Math.floor(y / 2) * 2);
+    const tile = map.tiles[tileX] && map.tiles[tileX][tileY];
+    if (!tile) return 1;
+
+    const unit = tile.bngFile > 0 ? tile.bngFile - 1 : 0;
+    const background = Number(tile.bng);
+    const index = background >= 0 ? unit * 10000 + background : -1;
+    let base = 1;
+
+    if (inRanges(index, [
+        [330, 349], [450, 454], [550, 554], [750, 754], [950, 954],
+        [1250, 1254], [1400, 1424], [1455, 1474], [1500, 1524], [1550, 1574],
+    ])) base = 9;
+    if (inRanges(index, [
+        [250, 254], [1005, 1009], [1050, 1054], [1060, 1064], [1450, 1454], [1650, 1654],
+    ])) base = 13;
+    if (inRanges(index, [
+        [605, 609], [650, 654], [660, 664], [2000, 2049], [3025, 3049],
+        [2400, 2424], [4625, 4649], [4675, 4678],
+    ])) base = 5;
+    if (inRanges(index, [
+        [1825, 1924], [2150, 2174], [3075, 3099], [3325, 3349], [3375, 3399],
+    ])) base = 21;
+    if ([3230, 3231, 3246, 3277].includes(index)
+        || inRanges(index, [[3780, 3799]])
+        || (index >= 3825 && index <= 4434 && (index - 3825) % 25 === 0)) base = 17;
+    if (inRanges(index, [[2075, 2099], [2125, 2149]])) base = 25;
+    if (inRanges(index, [[1800, 1824]])) base = 29;
+
+    if (index >= 825 && index <= 1349 && Math.floor((index - 825) / 25) % 2 === 0) base = 5;
+    if (index >= 1375 && index <= 1799 && Math.floor((index - 1375) / 25) % 2 === 0) base = 21;
+    if ([1385, 1386, 1391, 1392].includes(index)) base = 17;
+
+    if (tile.mid >= 0 && tile.mid <= 115) base = 1;
+    if (tile.mid >= 120 && tile.mid <= 124) base = 9;
+    if (inRanges(tile.obj, [[221, 289], [583, 658], [1183, 1206], [7163, 7295], [7404, 7414]])) base = 5;
+    if (inRanges(tile.obj, [[3125, 3267], [3757, 3948], [6030, 6999]])) base = 17;
+    if (inRanges(tile.obj, [[3316, 3589]])) base = 25;
+    return base;
+}
+
 export class PlayScene extends Scene {
     constructor(manager, snapshot) {
         super(manager);
