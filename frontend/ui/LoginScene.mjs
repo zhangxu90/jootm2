@@ -49,6 +49,9 @@ export class LoginScene extends Scene {
         this._urls = new Map();     // Prguse 图 URL 缓存
         this._bgTex = null;         // ChrSel[22] 背景
         this._bgLoading = false;
+        this._doorFrames = new Map();
+        this._doorFrameLoading = new Set();
+        this._doorOpening = null;
         this.root = null;
         this._edits = [];           // 当前窗口的输入框（回车跳转）
     }
@@ -65,6 +68,35 @@ export class LoginScene extends Scene {
         return url;
     }
 
+    _doorTexture(index) {
+        if (this._doorFrames.has(index)) return this._doorFrames.get(index);
+        if (!this._doorFrameLoading.has(index)) {
+            this._doorFrameLoading.add(index);
+            this.chr.getTexture(index).then(texture => {
+                this._doorFrameLoading.delete(index);
+                this._doorFrames.set(index, texture || null);
+            }).catch(error => {
+                this._doorFrameLoading.delete(index);
+                this._doorFrames.set(index, null);
+                console.warn('[login] unable to load door animation frame', index, error);
+            });
+        }
+        return null;
+    }
+
+    _beginDoorOpening() {
+        if (this._doorOpening) return;
+        this._doorOpening = {
+            startedAt: performance.now(),
+            frameDuration: 300,
+            frameCount: 10,
+            fadeDuration: 450,
+            transitioning: false,
+        };
+        if (this.root) this.root.style.visibility = 'hidden';
+        void audio.playSound(100); // Original s_rock_door_open.
+    }
+
     onEnter() {
         void audio.playBgm('log-in-long2');
         const gui = this.manager.winManager.container;
@@ -77,6 +109,7 @@ export class LoginScene extends Scene {
 
     onExit() {
         audio.stopBgm();
+        this._doorOpening = null;
         if (this.root) this.root.remove();
     }
 
@@ -305,7 +338,7 @@ export class LoginScene extends Scene {
     onMessage(type, msg) {
         if (type === 'loginResult') {
             if (msg.ok) {
-                this.manager.switchTo(new SelectCharScene(this.manager));
+                this._beginDoorOpening();
             } else {
                 this.errEl.textContent = msg.error || '登录失败。';   // 照原版 PassWdFail
             }
@@ -327,15 +360,45 @@ export class LoginScene extends Scene {
         }
     }
 
-    // 场景背景（照 TLoginScene.PlayScene：WChrSel.Images[102-80] = ChrSel[22] 铺满全屏）
+    // 原版 TLoginScene.PlayScene：ChrSel[22] 背景 + 登录成功后的 10 帧开门动画。
     render(ctx) {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
         if (this._bgTex) {
             ctx.drawImage(this._bgTex.canvas, 0, 0);
         } else if (!this._bgLoading) {
             this._bgLoading = true;
-            this.chr.getTexture(22).then((t) => { this._bgTex = t; });
+            this.chr.getTexture(22).then(texture => {
+                this._bgTex = texture || null;
+            }).catch(error => {
+                console.warn('[login] unable to load login background', error);
+            });
+        }
+
+        const opening = this._doorOpening;
+        if (!opening) return;
+
+        const now = performance.now();
+        const elapsed = Math.max(0, now - opening.startedAt);
+        const animationDuration = opening.frameDuration * opening.frameCount;
+        if (elapsed < animationDuration) {
+            const frame = Math.min(opening.frameCount - 1,
+                Math.floor(elapsed / opening.frameDuration));
+            const texture = this._doorTexture(23 + frame);
+            if (texture && texture.canvas) {
+                ctx.drawImage(texture.canvas, 152, 96);
+            }
+            return;
+        }
+
+        const fadeElapsed = elapsed - animationDuration;
+        const fade = Math.min(1, fadeElapsed / opening.fadeDuration);
+        ctx.fillStyle = 'rgba(0,0,0,' + fade.toFixed(3) + ')';
+        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        if (fade >= 1 && !opening.transitioning) {
+            opening.transitioning = true;
+            this.manager.switchTo(new SelectCharScene(this.manager));
         }
     }
 }
