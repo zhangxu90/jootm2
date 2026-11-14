@@ -3235,7 +3235,7 @@ public final class GameService {
         if (party == null) return;
         for (long id : new ArrayList<>(party.memberIds)) {
             Actor actor = world.actor(id);
-            if (actor instanceof Player member) sendPartyState(member);
+            if (actor instanceof Player) sendPartyState((Player) actor);
         }
     }
 
