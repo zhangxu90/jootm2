@@ -60,4 +60,30 @@ async function init() {
     window.__getLib = getLib;
 }
 
-init().catch(e => console.error('[init]', e));
+function showStartupError(error) {
+    const panel = document.createElement('div');
+    panel.setAttribute('role', 'alert');
+    panel.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
+        + 'padding:32px;box-sizing:border-box;background:#080705;color:#e8d7b5;'
+        + 'font:14px/1.8 SimSun,serif;text-align:left;white-space:pre-wrap;';
+    const content = document.createElement('div');
+    content.style.cssText = 'max-width:660px;padding:24px 28px;border:1px solid #8a7047;'
+        + 'background:#1a1510;box-shadow:0 8px 32px #000;';
+    const title = document.createElement('div');
+    title.textContent = '热血传奇 1.80 网页客户端无法启动';
+    title.style.cssText = 'margin-bottom:12px;color:#e6c06b;font-size:18px;';
+    const details = document.createElement('div');
+    details.textContent = (error && error.message ? error.message : String(error))
+        + '\n\n请把获准使用的 1.80 客户端资源放入服务端资源根目录：'
+        + '\nData/（WIL/WIX）、Map/（.map）、Wav/（WAV + sound.lst）、Music/（MP3）。'
+        + '\n资源缺失时不会用占位图冒充原版素材。';
+    content.append(title, details);
+    panel.appendChild(content);
+    guiEl.innerHTML = '';
+    guiEl.appendChild(panel);
+}
+
+init().catch(e => {
+    console.error('[init]', e);
+    showStartupError(e);
+});
