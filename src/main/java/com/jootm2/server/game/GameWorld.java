@@ -84,6 +84,8 @@ public final class GameWorld {
     private final Map<String, List<WorldData.Gate>> gatesBySrc = new HashMap<>();
     /** mapId → 中文地图名（MapInfo.txt 的第二个字段，HUD 底部“比奇省 289:618”用）。 */
     private final Map<String, String> mapTitles = new HashMap<>();
+    /** mapId → original MapInfo.txt MUSIC(n) value; absent/-1 means map music is disabled. */
+    private final Map<String, Integer> mapMusicIds = new HashMap<>();
     /** mapId → mmap.wil 索引（MiniMap.txt，原版小地图底图 WMMap）。 */
     private final Map<String, Integer> mapMiniIndex = new HashMap<>();
     /**
@@ -605,6 +607,9 @@ public final class GameWorld {
         // mapId → 中文地图名（原版 PEnvir.MapTitle，HUD 底部显示）
         for (Map.Entry<String, WorldData.MapDef> e : info.maps.entrySet()) {
             mapTitles.put(e.getKey(), e.getValue().name);
+            if (e.getValue().musicId >= 0) {
+                mapMusicIds.put(e.getKey(), e.getValue().musicId);
+            }
         }
         System.out.println("[world] loaded " + info.maps.size() + " map defs, " + kept + " gates");
     }
@@ -1723,6 +1728,7 @@ public final class GameWorld {
         map.addProperty("title", mapTitles.getOrDefault(p.map.name, p.map.name));   // 中文地图名（HUD 底部）
         map.addProperty("width", p.map.width);
         map.addProperty("height", p.map.height);
+        map.addProperty("musicId", mapMusicIds.getOrDefault(p.map.name, -1));
         o.add("map", map);
         o.addProperty("dayBright", dayBright);   // 昼夜时段（HUD 天气图标）
         o.addProperty("miniMapIndex", mapMiniIndex.getOrDefault(p.map.name, -1));   // mmap.wil 索引（-1 = 无小地图）
