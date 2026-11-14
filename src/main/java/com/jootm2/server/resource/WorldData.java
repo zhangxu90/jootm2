@@ -17,6 +17,8 @@ import java.util.Map;
 public final class WorldData {
 
     private static final Charset GBK = Charset.forName("GBK");
+    private static final java.util.regex.Pattern MUSIC_FLAG =
+            java.util.regex.Pattern.compile("(?i)\\bMUSIC\\s*\\(\\s*(-?\\d+)\\s*\\)");
 
     private WorldData() {
     }
@@ -225,8 +227,11 @@ public final class WorldData {
                     String[] kv = inner.split("\\s+", 2);
                     String mapId = kv[0].trim();
                     String name = kv.length > 1 ? kv[1].trim() : mapId;
-                    boolean safe = t.toUpperCase().contains("SAFE");
-                    maps.put(mapId, new MapDef(mapId, name, safe));
+                    String flags = t.substring(close + 1).trim();
+                    boolean safe = flags.toUpperCase().contains("SAFE");
+                    java.util.regex.Matcher musicMatcher = MUSIC_FLAG.matcher(flags);
+                    int musicId = musicMatcher.find() ? parseInt(musicMatcher.group(1)) : -1;
+                    maps.put(mapId, new MapDef(mapId, name, safe, musicId));
                 } else if (t.contains("->")) {
                     String[] sides = t.split("->", 2);
                     if (sides.length < 2) {
@@ -295,11 +300,14 @@ public final class WorldData {
         public final String mapId;
         public final String name;
         public final boolean safe;
+        /** Original MapInfo.txt MUSIC(n) flag; -1 means map music is disabled. */
+        public final int musicId;
 
-        public MapDef(String mapId, String name, boolean safe) {
+        public MapDef(String mapId, String name, boolean safe, int musicId) {
             this.mapId = mapId;
             this.name = name;
             this.safe = safe;
+            this.musicId = musicId;
         }
     }
 
