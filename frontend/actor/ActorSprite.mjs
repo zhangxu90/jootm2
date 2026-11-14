@@ -112,7 +112,7 @@ export class ActorSprite {
         const wlib = getLib(lib);
         if (wlib && !this._loading.has(key)) {
             this._loading.add(key);
-            wlib.getTexture(index).then(tex => {
+            wlib.getTexture(index, 95).then(tex => {
                 this._tex.set(key, tex || null);
             }).catch(() => {
                 this._tex.set(key, null);
