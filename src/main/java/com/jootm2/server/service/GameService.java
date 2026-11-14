@@ -2673,7 +2673,7 @@ public final class GameService {
             return;
         }
         world.sendSystem(p, "你创建了行会 " + name + "，并成为会长。");
-        sendGuildState(p);
+        broadcastGuildState(g);
     }
 
     private void joinGuild(PlayerSession session, JsonObject msg) {
@@ -2684,10 +2684,11 @@ public final class GameService {
         String name = str(msg, "name");
         if (world.joinGuild(p.name, name)) {
             world.sendSystem(p, "你加入了行会 " + name + "。");
+            broadcastGuildState(world.guildOf(p.name));
         } else {
             world.sendSystem(p, "加入行会失败（行会不存在或你已在行会）。");
+            sendGuildState(p);
         }
-        sendGuildState(p);
     }
 
     private void leaveGuild(PlayerSession session) {
@@ -2695,12 +2696,15 @@ public final class GameService {
         if (p == null) {
             return;
         }
+        Guild previous = world.guildOf(p.name);
         if (world.leaveGuild(p.name)) {
             world.sendSystem(p, "你已退出行会。");
+            broadcastGuildState(previous);
+            sendGuildState(p);
         } else {
             world.sendSystem(p, "你不在任何行会中。");
+            sendGuildState(p);
         }
-        sendGuildState(p);
     }
 
     private void guildInfo(PlayerSession session) {
@@ -2798,10 +2802,11 @@ public final class GameService {
         String target = str(msg, "name");
         if (world.declareGuildWar(g.name, target)) {
             world.sendSystem(p, "你的行会与 " + target + " 宣战。");
+            broadcastGuildState(g);
         } else {
             world.sendSystem(p, "宣战失败（行会不存在）。");
+            sendGuildState(p);
         }
-        sendGuildState(p);
     }
 
     private void guildAlly(PlayerSession session, JsonObject msg) {
@@ -2817,10 +2822,11 @@ public final class GameService {
         String target = str(msg, "name");
         if (world.makeGuildAlly(g.name, target)) {
             world.sendSystem(p, "你的行会与 " + target + " 结盟。");
+            broadcastGuildState(g);
         } else {
             world.sendSystem(p, "结盟失败（行会不存在）。");
+            sendGuildState(p);
         }
-        sendGuildState(p);
     }
 
     // -- parties (组队) ----------------------------------------------------------
@@ -3246,6 +3252,15 @@ public final class GameService {
         sendBagUpdate(t.b);
         world.sendStats(t.a, null);
         world.sendStats(t.b, null);
+    }
+
+    private void broadcastGuildState(Guild guild) {
+        if (guild == null) return;
+        List<String> members = new ArrayList<>(guild.members);
+        for (String memberName : members) {
+            Player member = world.player(memberName);
+            if (member != null && member.session != null) sendGuildState(member);
+        }
     }
 
     private void sendGuildState(Player p) {
