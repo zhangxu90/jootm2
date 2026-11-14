@@ -353,6 +353,7 @@ export class SelectCharScene extends Scene {
             const off = n === 1 ? { bx: 340, by: 2, fx: 340, fy: 2 } : { bx: 0, by: 0, fx: 0, fy: 0 };
 
             let img, x, y;
+            let transitionEffect = null;
             const transition = this._slotTransitions[n];
             const frozenBase = 60 + c.job * 40 + c.sex * 120;
             let transitionFrame = -1;
@@ -371,15 +372,7 @@ export class SelectCharScene extends Scene {
                 x = pos.fx + off.fx;
                 y = pos.fy + off.fy;
                 // Original ChrSel[4..11] DrawBlend flicker during the transition.
-                const effect = this._chrTexture(4 + (transitionFrame % 8));
-                if (effect && effect.canvas) {
-                    const pulse = Math.max(0.15, 0.45 + 0.35 * Math.sin((now - transition.startedAt) / 45));
-                    ctx.save();
-                    ctx.globalCompositeOperation = 'lighter';
-                    ctx.globalAlpha = pulse;
-                    ctx.drawImage(effect.canvas, x + (effect.px || 0), y + (effect.py || 0));
-                    ctx.restore();
-                }
+                transitionEffect = this._chrTexture(4 + (transitionFrame % 8));
             } else if (n === this.selected) {
                 img = 40 + c.job * 40 + this._frame + c.sex * 120;
                 x = pos.fx + off.fx;
