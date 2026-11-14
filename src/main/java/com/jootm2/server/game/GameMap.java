@@ -117,6 +117,18 @@ public final class GameMap {
         return closed;
     }
 
+    /** Snapshot currently open doors for players entering this map. */
+    public List<int[]> openDoors() {
+        List<int[]> result = new ArrayList<>();
+        for (Map.Entry<Integer, Boolean> entry : doors.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                int index = entry.getKey();
+                result.add(new int[] { index % width, index / width });
+            }
+        }
+        return result;
+    }
+
     /** Finds a random walkable, unoccupied cell. */
     public int[] randomFreeCell() {
         for (int attempt = 0; attempt < 1000; attempt++) {
